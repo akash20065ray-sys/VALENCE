@@ -1,0 +1,51 @@
+[package]
+name = "valence"
+version = "0.1.0"
+edition = "2021"
+authors = ["Akash <akash@valence.io>"]
+description = "Next-Generation In-Memory State Engine in Pure Rust"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "valence"
+path = "src/lib.rs"
+
+[[bin]]
+name = "valence-server"
+path = "src/bin/valence_server.rs"
+
+[[bin]]
+name = "valence-cli"
+path = "src/bin/valence_cli.rs"
+
+[dependencies]
+# Concurrency & Lock-Free Primitives
+crossbeam = "0.8"
+crossbeam-channel = "0.5"
+crossbeam-utils = "0.8"
+parking_lot = "0.12"
+
+# Fast Hashing
+twox-hash = "1.6"
+
+# Memory & Buffer Management
+memmap2 = "0.9"
+
+# Command-Line Parser for Diagnostic CLI
+clap = { version = "4.4", features = ["derive"] }
+
+[dev-dependencies]
+criterion = "0.5"
+tempfile = "3.10"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+overflow-checks = false
+
+[profile.bench]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
