@@ -4,7 +4,7 @@
 [![Protocol: RESP3](https://img.shields.io/badge/Protocol-RESP2%20%2F%20RESP3-blue.svg)](https://redis.io/docs/reference/protocol-spec/)
 [![Snapshots: Zero-Fork](https://img.shields.io/badge/Snapshots-Zero--Fork%20Epochs-success.svg)]()
 [![TTL: 4-Tier HTW](https://img.shields.io/badge/TTL%20Engine-4--Tier%20Hierarchical%20Wheel-brightgreen.svg)]()
-[![Tests: 23 Passing](https://img.shields.io/badge/Tests-23%2F23%20Passing-brightgreen.svg)]()
+[![Tests: 26 Passing](https://img.shields.io/badge/Tests-26%2F26%20Passing-brightgreen.svg)]()
 [![License: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)]()
 
 > **Valence** is a next-generation in-memory state engine written from scratch in pure Rust. It is architecturally engineered to eliminate the **seven systemic production bottlenecks** of incumbent in-memory databases (Redis/Valkey) in hyperscale multi-core cloud environments.
@@ -63,18 +63,6 @@
 
 ---
 
-## Features Implemented to Date
-
-- [x] **Sub-Phase 1.1:** 64-Byte Cache-Line Aligned Slots & SSO Keys/Values (`src/storage/entry.rs`).
-- [x] **Sub-Phase 1.2:** Contiguous Flat Robin Hood Hash Map with Backshift Deletion (`src/storage/robin_hood.rs`).
-- [x] **Sub-Phase 1.3:** Zero-Copy RESP3 Protocol Parser & Serializer (`src/protocol/resp.rs`).
-- [x] **Sub-Phase 1.4:** Non-Blocking TCP Server & Multiplexed Event Loop (`src/server/connection.rs`, `src/server/engine.rs`).
-- [x] **Sub-Phase 2.1:** Intrusive Lock-Free Expiration Slot Buckets (`src/timer/slot.rs`).
-- [x] **Sub-Phase 2.2:** 4-Tier Cascaded Timing Wheel State Machine (`src/timer/timing_wheel.rs`).
-- [x] **Sub-Phase 2.3:** Decoupled Asynchronous Expiration Pipeline (`src/server/engine.rs`).
-- [x] **Sub-Phase 2.4:** TTL Avalanche Chaos Benchmark (`tests/avalanche_chaos.py`).
-
----
 
 ## Quick Start
 
@@ -197,19 +185,6 @@ python tests/avalanche_chaos.py --host 127.0.0.1 --port 6379 --keys 50000 --ttl 
 =======================================================
 ```
 
----
-
-## Roadmap
-
-- [x] **Milestone 1:** Single-Core Maximum Efficiency & RESP Engine (Phases 1 & 2)
-- [ ] **Milestone 2:** Multi-Core Scale & Zero-Header Memory (Phases 3 & 4)
-  - Thread-per-Core Shards & 64B Cache-Padded SPSC Rings
-  - 2MB Geometric Slab Arenas & Bi-Directional Cold Tiering
-- [ ] **Milestone 3:** Enterprise Durability & Adversarial Chaos (Phases 5 & 6)
-  - Forkless Snapshot Engine & NVMe Log-Structured Extents
-  - Active-Active Replication & Adversarial Fuzzing Suite
-
----
 
 ## License
 

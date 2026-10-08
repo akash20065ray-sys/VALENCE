@@ -11,11 +11,13 @@
 
 pub mod protocol;
 pub mod server;
+pub mod sharding;
 pub mod storage;
 pub mod timer;
 
 pub use protocol::{Command, ParseError, RespEncoder, RespParser};
 pub use server::{ClientConnection, ServerEngine, ServerStats};
+pub use sharding::{pin_current_thread_to_core, spawn_pinned_worker, AffinityError, CoreId, CpuTopology};
 pub use storage::entry::{CompactKey, CompactValue, Slot, SlotState};
 pub use storage::robin_hood::RobinHoodMap;
 pub use timer::{AtomicTimerBucket, TimerNode, TimingWheel};
