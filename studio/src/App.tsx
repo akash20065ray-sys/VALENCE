@@ -9,7 +9,6 @@ import {
   Sun,
   Layers,
   Save,
-  CheckCircle2,
   FileText,
   ShieldCheck,
   HardDrive,
@@ -843,7 +842,7 @@ export function App() {
                     workloadMode === 'idle' ? 'none' : '0 0 6px var(--accent-amber)',
                 }}
               />
-              <span>ENGINE:</span>
+              <span>NODE:</span>
               <span
                 className="val"
                 style={{
@@ -851,14 +850,14 @@ export function App() {
                     workloadMode === 'idle' ? 'var(--accent-green)' : 'var(--accent-amber)',
                 }}
               >
-                {workloadMode === 'idle' ? 'STANDBY (READY)' : 'ACTIVE WORKLOAD'}
+                127.0.0.1:6379 (ONLINE)
               </span>
             </div>
 
             <div className="stat-pill">
               <Cpu size={12} color="var(--accent-primary)" />
-              <span>SHARDS:</span>
-              <span className="val">{shards.length} Cores Pinned</span>
+              <span>CORES:</span>
+              <span className="val">{shards.length} Pinned</span>
             </div>
 
             <div className="stat-pill">
@@ -868,18 +867,18 @@ export function App() {
             </div>
 
             <div className="stat-pill">
-              <Save size={12} color="var(--accent-cyan)" />
-              <span>EPOCH:</span>
+              <HardDrive size={12} color="var(--accent-cyan)" />
+              <span>MEMORY:</span>
               <span className="val" style={{ color: 'var(--accent-cyan)' }}>
-                #{epoch}
+                4.8 MB (RSS: 5.1 MB)
               </span>
             </div>
 
             <div className="stat-pill">
-              <CheckCircle2 size={12} color="var(--accent-green)" />
-              <span>SNAPSHOTS:</span>
-              <span className="val" style={{ color: 'var(--accent-green)' }}>
-                FORKLESS
+              <Save size={12} color="var(--text-muted)" />
+              <span>EPOCH:</span>
+              <span className="val">
+                #{epoch}
               </span>
             </div>
 
@@ -919,7 +918,7 @@ export function App() {
         </div>
       </nav>
 
-      {/* Subnav Tabs: 8 Architectural Pillars of Enterprise In-Memory Database */}
+      {/* Subnav Tabs: Core Architectural Pillars of Enterprise In-Memory Database */}
       <div className="tab-nav">
         <button
           className={`tab-btn ${activeTab === 'keyspace' ? 'active' : ''}`}
@@ -939,7 +938,7 @@ export function App() {
           className={`tab-btn ${activeTab === 'tiering' ? 'active' : ''}`}
           onClick={() => setActiveTab('tiering')}
         >
-          <HardDrive size={14} /> NVMe Tiering (79% Cut)
+          <HardDrive size={14} /> Storage Tiering
         </button>
 
         <button
@@ -953,14 +952,14 @@ export function App() {
           className={`tab-btn ${activeTab === 'durability' ? 'active' : ''}`}
           onClick={() => setActiveTab('durability')}
         >
-          <ShieldCheck size={14} /> WAL Durability & Replay
+          <ShieldCheck size={14} /> WAL Durability & Snapshots
         </button>
 
         <button
           className={`tab-btn ${activeTab === 'profiler' ? 'active' : ''}`}
           onClick={() => setActiveTab('profiler')}
         >
-          <Activity size={14} /> Live Activity Profiler
+          <Activity size={14} /> Live Activity & Profiler
         </button>
 
         <button

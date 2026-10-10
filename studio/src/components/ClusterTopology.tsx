@@ -59,40 +59,40 @@ export const ClusterTopology: React.FC<ClusterTopologyProps> = ({
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '11.5px' }}>
             <Zap size={14} color="var(--accent-cyan)" />
-            <span>ZERO-LOCK IPC RINGS</span>
+            <span>INTER-CORE SPSC CHANNELS</span>
           </div>
           <div style={{ fontSize: '20px', fontWeight: 700, marginTop: '6px', color: 'var(--text-primary)' }}>
             64B SPSC Ring
           </div>
           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Cache-Line Padded &bull; Mutex-Free
+            Cache-Line Padded &bull; Lock-Free IPC
           </div>
         </div>
 
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '11.5px' }}>
             <Layers size={14} color="var(--accent-green)" />
-            <span>ZERO-HEAP SSO EFFICIENCY</span>
+            <span>SMALL STRING INLINING (SSO)</span>
           </div>
           <div style={{ fontSize: '20px', fontWeight: 700, marginTop: '6px', color: 'var(--text-primary)' }}>
             {ssoRatio}% Inlined
           </div>
           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            {ssoKeys} of {totalKeys} keys bypass malloc
+            {ssoKeys} of {totalKeys} keys inlined in pointer
           </div>
         </div>
 
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '11.5px' }}>
             <HardDrive size={14} color="var(--accent-amber)" />
-            <span>FORKLESS SNAPSHOTS</span>
+            <span>PERSISTENCE & RECOVERY</span>
           </div>
           <div style={{ fontSize: '20px', fontWeight: 700, marginTop: '6px', color: 'var(--text-primary)' }}>
             Epoch #{epoch}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--accent-green)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
             <Check size={12} />
-            <span>CRC64 Validated &bull; Zero-Fork CoW</span>
+            <span>CRC64 Validated &bull; Streaming CoW</span>
           </div>
         </div>
       </div>

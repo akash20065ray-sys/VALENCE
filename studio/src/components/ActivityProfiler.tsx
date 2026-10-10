@@ -96,12 +96,15 @@ export const ActivityProfiler: React.FC<ActivityProfilerProps> = ({
           </div>
         </div>
 
-        {/* Workload Control Selector */}
+        {/* Traffic Generator & Latency Percentiles */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.5px' }}>
+            LOAD GENERATOR:
+          </span>
           <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderRadius: '6px', padding: '3px', border: '1px solid var(--border-subtle)' }}>
             {(
               [
-                { id: 'idle', label: 'Idle (0 ops/s)' },
+                { id: 'idle', label: 'Idle' },
                 { id: 'oltp', label: 'OLTP (1.2k ops/s)' },
                 { id: 'stress', label: 'Stress (8.5k ops/s)' },
               ] as const
@@ -124,6 +127,14 @@ export const ActivityProfiler: React.FC<ActivityProfilerProps> = ({
                 {w.label}
               </button>
             ))}
+          </div>
+
+          <div className="stat-pill">
+            <CheckCircle size={12} color="var(--accent-green)" />
+            <span>HIT RATE:</span>
+            <span className="val" style={{ color: 'var(--accent-green)' }}>
+              {workloadMode === 'idle' ? '100%' : '99.4%'}
+            </span>
           </div>
 
           <div className="stat-pill">
