@@ -1,3 +1,5 @@
+export type ThemeMode = 'slate' | 'charcoal' | 'platinum';
+
 export interface ShardData {
   id: number;
   coreId: number;
@@ -7,20 +9,15 @@ export interface ShardData {
   queueCapacity: number;
   skewPercent: number;
   isPinned: boolean;
-}
-
-export interface TimingWheelTier {
-  tier: number;
-  name: string;
-  slotCount: number;
-  resolution: string;
-  activeTimers: number;
-  currentSlot: number;
+  memoryAllocatedKb: number;
+  loadFactorPct: number;
+  maxDib: number;
 }
 
 export interface KeyspaceItem {
   key: string;
   value: string;
+  dataType: 'string' | 'hash' | 'list' | 'set' | 'zset';
   sizeBytes: number;
   isSso: boolean;
   dib: number;
@@ -30,15 +27,6 @@ export interface KeyspaceItem {
   targetShard: number;
 }
 
-export interface LatencyMetric {
-  timestamp: number;
-  valenceUs: number;
-  redisUs: number;
-  p50: number;
-  p90: number;
-  p99: number;
-}
-
 export interface CommandLog {
   id: string;
   timestamp: string;
@@ -46,4 +34,5 @@ export interface CommandLog {
   response: string;
   durationUs: number;
   isError: boolean;
+  shardId?: number;
 }
