@@ -17,6 +17,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use super::affinity::{spawn_pinned_worker, AffinityError, CoreId, CpuTopology};
 use super::router::ShardRouter;
 use super::spsc_ring::{spsc_channel, Consumer, Producer, QueueFull};
+use crate::snapshot::{ShadowBuffer, SnapshotItem, SnapshotScanner};
 use crate::storage::RobinHoodMap;
 use crate::timer::TimingWheel;
 
@@ -30,7 +31,10 @@ pub enum ShardOp {
     Set { key: Vec<u8>, value: Vec<u8>, ttl_ms: Option<u64> },
     Del { key: Vec<u8> },
     Exists { key: Vec<u8> },
+    Expire { key: Vec<u8>, ttl_ms: u64 },
+    Ttl { key: Vec<u8> },
     Len,
+    SnapshotScan { target_epoch: u64 },
     Shutdown,
 }
 
@@ -41,6 +45,8 @@ pub enum ShardResult {
     Ok,
     Bool(bool),
     Count(usize),
+    Ttl(i64),
+    Snapshot(Vec<SnapshotItem>),
 }
 
 /// Request envelope sent over the incoming SPSC ring buffer.
@@ -252,6 +258,26 @@ impl ShardCoordinator {
         }
     }
 
+    /// Sets a TTL in milliseconds on the specified key. Returns true if key exists.
+    pub fn execute_expire(&self, key: &[u8], ttl_ms: u64) -> Result<bool, ShardError> {
+        let shard_idx = self.route_key(key);
+        let result = self.dispatch_to_shard(shard_idx, ShardOp::Expire { key: key.to_vec(), ttl_ms })?;
+        match result {
+            ShardResult::Bool(b) => Ok(b),
+            _ => Err(ShardError::WorkerDisconnected),
+        }
+    }
+
+    /// Returns the remaining TTL in seconds for a key: -2 if key does not exist, -1 if no TTL, or seconds remaining.
+    pub fn execute_ttl(&self, key: &[u8]) -> Result<i64, ShardError> {
+        let shard_idx = self.route_key(key);
+        let result = self.dispatch_to_shard(shard_idx, ShardOp::Ttl { key: key.to_vec() })?;
+        match result {
+            ShardResult::Ttl(ttl) => Ok(ttl),
+            _ => Err(ShardError::WorkerDisconnected),
+        }
+    }
+
     /// Executes a multi-key MGET operation with deterministic ascending shard ID ordering.
     ///
     /// Sorting target shard IDs guarantees deadlock-free parallel execution across cores.
@@ -335,6 +361,20 @@ impl ShardCoordinator {
         Ok(total)
     }
 
+    /// Collects consistent point-in-time snapshot items across all shards.
+    pub fn collect_snapshot(&self, target_epoch: u64) -> Result<Vec<SnapshotItem>, ShardError> {
+        let mut items = Vec::new();
+        for shard_idx in 0..self.workers.len() {
+            let res = self.dispatch_to_shard(shard_idx, ShardOp::SnapshotScan { target_epoch })?;
+            if let ShardResult::Snapshot(shard_items) = res {
+                items.extend(shard_items);
+            } else {
+                return Err(ShardError::WorkerDisconnected);
+            }
+        }
+        Ok(items)
+    }
+
     /// Cleanly signals all shard workers to stop and joins their threads.
     pub fn shutdown(&self) {
         for shard_idx in 0..self.workers.len() {
@@ -362,6 +402,7 @@ impl Drop for ShardCoordinator {
 fn run_shard_worker(rx: Consumer<ShardRequest>, tx: Producer<ShardResponse>) {
     let mut map = RobinHoodMap::new(1024);
     let mut ttl_map: HashMap<Vec<u8>, Instant> = HashMap::new();
+    let shadow_buffer = ShadowBuffer::new();
 
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -431,7 +472,64 @@ fn run_shard_worker(rx: Consumer<ShardRequest>, tx: Producer<ShardResponse>) {
                         ShardResult::Bool(map.contains_key(&key))
                     }
                 }
+                ShardOp::Expire { key, ttl_ms } => {
+                    if map.contains_key(&key) {
+                        let deadline = Instant::now() + Duration::from_millis(ttl_ms);
+                        ttl_map.insert(key.clone(), deadline);
+                        let curr_ms = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+                        wheel.schedule(&key, curr_ms + ttl_ms);
+                        ShardResult::Bool(true)
+                    } else {
+                        ShardResult::Bool(false)
+                    }
+                }
+                ShardOp::Ttl { key } => {
+                    if !map.contains_key(&key) {
+                        ShardResult::Ttl(-2)
+                    } else if let Some(&expire_time) = ttl_map.get(&key) {
+                        let now = Instant::now();
+                        if now >= expire_time {
+                            ttl_map.remove(&key);
+                            map.delete(&key);
+                            ShardResult::Ttl(-2)
+                        } else {
+                            let rem = expire_time.duration_since(now).as_secs() as i64;
+                            ShardResult::Ttl(rem)
+                        }
+                    } else {
+                        ShardResult::Ttl(-1)
+                    }
+                }
                 ShardOp::Len => ShardResult::Count(map.len()),
+                ShardOp::SnapshotScan { target_epoch } => {
+                    let scan_now_ms = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+                    let expired = wheel.advance_to(scan_now_ms);
+                    for exp_key in expired {
+                        map.delete(&exp_key);
+                        ttl_map.remove(&exp_key);
+                    }
+                    let now = Instant::now();
+                    let mut expired_keys = Vec::new();
+                    for (k, expire_at) in ttl_map.iter() {
+                        if now >= *expire_at {
+                            expired_keys.push(k.clone());
+                        }
+                    }
+                    for k in expired_keys {
+                        map.delete(&k);
+                        ttl_map.remove(&k);
+                    }
+
+                    let scanner = SnapshotScanner::new(target_epoch, &map, &shadow_buffer);
+                    let (items, _stats) = scanner.collect_all();
+                    ShardResult::Snapshot(items)
+                }
                 ShardOp::Shutdown => unreachable!(),
             };
 
@@ -571,6 +669,35 @@ mod tests {
         }
 
         assert_eq!(coordinator.total_keys().unwrap(), num_threads * ops_per_thread);
+        coordinator.shutdown();
+    }
+
+    #[test]
+    fn test_cross_shard_snapshot_collection() {
+        let coordinator = ShardCoordinator::new(4).expect("Failed to create coordinator");
+
+        for i in 0..20 {
+            let key = format!("snap:key:{}", i);
+            let val = format!("val:{}", i);
+            coordinator.execute_set(key.as_bytes(), val.as_bytes(), None).unwrap();
+        }
+
+        assert_eq!(coordinator.total_keys().unwrap(), 20);
+
+        let snapshot_items = coordinator.collect_snapshot(1).unwrap();
+        assert_eq!(snapshot_items.len(), 20);
+
+        let mut collected_keys: Vec<String> = snapshot_items
+            .into_iter()
+            .map(|item| String::from_utf8(item.key).unwrap())
+            .collect();
+        collected_keys.sort();
+
+        let mut expected_keys: Vec<String> = (0..20).map(|i| format!("snap:key:{}", i)).collect();
+        expected_keys.sort();
+
+        assert_eq!(collected_keys, expected_keys);
+
         coordinator.shutdown();
     }
 }

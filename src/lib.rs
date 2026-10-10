@@ -17,7 +17,7 @@ pub mod storage;
 pub mod timer;
 
 pub use protocol::{Command, ParseError, RespEncoder, RespParser};
-pub use server::{ClientConnection, ServerEngine, ServerStats};
+pub use server::{ClientConnection, ServerEngine, ServerStats, ShardedServerEngine, ShardedServerStats};
 pub use sharding::{
     jump_consistent_hash, murmur3_32, pin_current_thread_to_core, spawn_pinned_worker,
     spsc_channel, AffinityError, CachePadded, Consumer, CoreId, CpuTopology, Producer,

@@ -253,6 +253,62 @@ impl ClientConnection {
                     tx_buf.extend_from_slice(&RespEncoder::integer(-1));
                 }
             }
+            Command::Exists { key } => {
+                stats.total_reads += 1;
+                let exists = if let Some(&expire_time) = ttl_map.get(key) {
+                    if now >= expire_time {
+                        ttl_map.remove(key);
+                        map.delete(key);
+                        false
+                    } else {
+                        map.contains_key(key)
+                    }
+                } else {
+                    map.contains_key(key)
+                };
+                tx_buf.extend_from_slice(&RespEncoder::integer(if exists { 1 } else { 0 }));
+            }
+            Command::MGet { keys } => {
+                stats.total_reads += keys.len() as u64;
+                for &key in &keys {
+                    if let Some(&expire_time) = ttl_map.get(key) {
+                        if now >= expire_time {
+                            ttl_map.remove(key);
+                            map.delete(key);
+                        }
+                    }
+                }
+                let mut values: Vec<Option<&[u8]>> = Vec::with_capacity(keys.len());
+                for &key in &keys {
+                    values.push(map.get(key));
+                }
+                tx_buf.extend_from_slice(&RespEncoder::array(&values));
+            }
+            Command::MSet { pairs } => {
+                stats.total_writes += pairs.len() as u64;
+                for (key, val) in pairs {
+                    ttl_map.remove(key);
+                    map.insert(key, val);
+                }
+                tx_buf.extend_from_slice(&RespEncoder::ok());
+            }
+            Command::DbSize => {
+                stats.total_reads += 1;
+                tx_buf.extend_from_slice(&RespEncoder::integer(map.len() as i64));
+            }
+            Command::Save => {
+                tx_buf.extend_from_slice(&RespEncoder::ok());
+            }
+            Command::Bgsave => {
+                tx_buf.extend_from_slice(&RespEncoder::simple_string("Background saving started"));
+            }
+            Command::Lastsave => {
+                let now_sec = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64;
+                tx_buf.extend_from_slice(&RespEncoder::integer(now_sec));
+            }
             Command::Command => {
                 // Return empty array for Redis-CLI handshake
                 tx_buf.extend_from_slice(b"*0\r\n");

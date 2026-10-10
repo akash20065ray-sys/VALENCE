@@ -15,8 +15,15 @@ pub enum Command<'a> {
         expire_ms: Option<u64>,
     },
     Del { key: &'a [u8] },
+    Exists { key: &'a [u8] },
     Expire { key: &'a [u8], seconds: u64 },
     Ttl { key: &'a [u8] },
+    MGet { keys: Vec<&'a [u8]> },
+    MSet { pairs: Vec<(&'a [u8], &'a [u8])> },
+    DbSize,
+    Save,
+    Bgsave,
+    Lastsave,
     Command,
     Info,
     Unknown(&'a [u8]),
@@ -203,6 +210,37 @@ impl RespParser {
                 return Err(ParseError::InvalidFrame("TTL requires key"));
             }
             Ok(Command::Ttl { key: args[1] })
+        } else if eq_ignore_ascii_case(cmd_name, b"EXISTS") {
+            if args.len() < 2 {
+                return Err(ParseError::InvalidFrame("EXISTS requires key"));
+            }
+            Ok(Command::Exists { key: args[1] })
+        } else if eq_ignore_ascii_case(cmd_name, b"MGET") {
+            if args.len() < 2 {
+                return Err(ParseError::InvalidFrame("MGET requires at least one key"));
+            }
+            Ok(Command::MGet {
+                keys: args[1..].to_vec(),
+            })
+        } else if eq_ignore_ascii_case(cmd_name, b"MSET") {
+            if args.len() < 3 || (args.len() - 1) % 2 != 0 {
+                return Err(ParseError::InvalidFrame("MSET requires key-value pairs"));
+            }
+            let mut pairs = Vec::with_capacity((args.len() - 1) / 2);
+            let mut i = 1;
+            while i < args.len() {
+                pairs.push((args[i], args[i + 1]));
+                i += 2;
+            }
+            Ok(Command::MSet { pairs })
+        } else if eq_ignore_ascii_case(cmd_name, b"DBSIZE") {
+            Ok(Command::DbSize)
+        } else if eq_ignore_ascii_case(cmd_name, b"SAVE") {
+            Ok(Command::Save)
+        } else if eq_ignore_ascii_case(cmd_name, b"BGSAVE") {
+            Ok(Command::Bgsave)
+        } else if eq_ignore_ascii_case(cmd_name, b"LASTSAVE") {
+            Ok(Command::Lastsave)
         } else if eq_ignore_ascii_case(cmd_name, b"COMMAND") {
             Ok(Command::Command)
         } else if eq_ignore_ascii_case(cmd_name, b"INFO") {
@@ -281,6 +319,32 @@ impl RespEncoder {
     #[inline(always)]
     pub fn pong() -> Vec<u8> {
         b"+PONG\r\n".to_vec()
+    }
+
+    #[inline(always)]
+    pub fn boolean(val: bool) -> Vec<u8> {
+        if val {
+            b":1\r\n".to_vec()
+        } else {
+            b":0\r\n".to_vec()
+        }
+    }
+
+    #[inline(always)]
+    pub fn array_header(len: usize) -> Vec<u8> {
+        format!("*{}\r\n", len).into_bytes()
+    }
+
+    pub fn array(items: &[Option<&[u8]>]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(16 + items.len() * 32);
+        out.extend_from_slice(&Self::array_header(items.len()));
+        for item in items {
+            match item {
+                Some(bytes) => out.extend_from_slice(&Self::bulk_string(bytes)),
+                None => out.extend_from_slice(&Self::null()),
+            }
+        }
+        out
     }
 }
 
