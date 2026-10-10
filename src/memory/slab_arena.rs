@@ -367,6 +367,13 @@ impl SlabArena {
             fragmentation_ratio,
         }
     }
+
+    /// Resets all slab classes in the arena.
+    pub fn reset(&mut self) {
+        for class in self.classes.iter_mut() {
+            class.reset();
+        }
+    }
 }
 
 impl Default for SlabArena {
