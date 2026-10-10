@@ -116,7 +116,7 @@ fn bench_timing_wheel(c: &mut Criterion) {
     export_comparative_summary();
 
     let mut group = c.benchmark_group("4-Tier Timing Wheel");
-    let mut wheel = TimingWheel::new(0);
+    let wheel = TimingWheel::new(0);
 
     group.bench_function("Schedule Expiration Node (O(1) Bitmask)", |b| {
         let mut id = 1u64;
