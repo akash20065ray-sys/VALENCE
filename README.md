@@ -301,7 +301,19 @@ redis-cli -p 6379 GET session:tok_991
 redis-cli -p 6379 INFO
 ```
 
-### 5. Running the TTL Avalanche Chaos Harness
+### 5. Launching Valence Studio (Web Observability Console)
+Valence includes an industrial dark-mode management console engineered in React, TypeScript, and Vite. It provides real-time telemetry for pinned CPU shards, interactive 4-tier timing wheels, keyspace Small String Optimization (SSO) auditing, and live RESP terminal execution:
+
+```bash
+# Navigate to the studio directory and launch the development console
+cd studio
+npm install
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173) in your browser to access the live dashboard.
+
+### 6. Running the TTL Avalanche Chaos Harness
 The repository includes a standalone Python chaos harness (`tests/avalanche_chaos.py`) that synchronizes thousands of keys with identical expiration timestamps while measuring probe latency:
 
 ```bash
