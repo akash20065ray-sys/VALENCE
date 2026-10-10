@@ -1,4 +1,4 @@
-//! CPU Topology Discovery & Hardware Core Pinning (Sub-Phase 3.1)
+//! CPU Topology Discovery & Hardware Core Pinning
 //!
 //! Enforces the Thread-per-Core execution model:
 //! - Discovers host CPU topology and available hardware execution parallelism.

@@ -17,7 +17,10 @@ pub mod timer;
 
 pub use protocol::{Command, ParseError, RespEncoder, RespParser};
 pub use server::{ClientConnection, ServerEngine, ServerStats};
-pub use sharding::{pin_current_thread_to_core, spawn_pinned_worker, AffinityError, CoreId, CpuTopology};
+pub use sharding::{
+    jump_consistent_hash, murmur3_32, pin_current_thread_to_core, spawn_pinned_worker,
+    AffinityError, CoreId, CpuTopology, ShardRouter,
+};
 pub use storage::entry::{CompactKey, CompactValue, Slot, SlotState};
 pub use storage::robin_hood::RobinHoodMap;
 pub use timer::{AtomicTimerBucket, TimerNode, TimingWheel};
