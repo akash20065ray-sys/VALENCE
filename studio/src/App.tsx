@@ -14,7 +14,6 @@ import {
   ShieldCheck,
   HardDrive,
   Zap,
-  BarChart3,
 } from 'lucide-react';
 import { KeyspaceBrowser } from './components/KeyspaceBrowser';
 import { ClusterTopology } from './components/ClusterTopology';
@@ -23,7 +22,6 @@ import { ActivityProfiler } from './components/ActivityProfiler';
 import { RespWorkbench } from './components/RespWorkbench';
 import { TieringConsole } from './components/TieringConsole';
 import { ExplainVisualizer } from './components/ExplainVisualizer';
-import { BenchmarkArena } from './components/BenchmarkArena';
 import type {
   ShardData,
   KeyspaceItem,
@@ -39,9 +37,9 @@ import type {
 import { routeKey } from './utils/router';
 
 export function App() {
-  // Navigation: 8 Architectural Pillars of Enterprise In-Memory Database
+  // Navigation: 7 Core Operational Pillars of Enterprise In-Memory Database Console
   const [activeTab, setActiveTab] = useState<
-    'keyspace' | 'topology' | 'tiering' | 'explain' | 'benchmarks' | 'durability' | 'profiler' | 'workbench'
+    'keyspace' | 'topology' | 'tiering' | 'explain' | 'durability' | 'profiler' | 'workbench'
   >('keyspace');
 
   // Theme Mode: Default is 'slate' (balanced industrial mid-tone slate)
@@ -952,13 +950,6 @@ export function App() {
         </button>
 
         <button
-          className={`tab-btn ${activeTab === 'benchmarks' ? 'active' : ''}`}
-          onClick={() => setActiveTab('benchmarks')}
-        >
-          <BarChart3 size={14} /> Benchmark Arena
-        </button>
-
-        <button
           className={`tab-btn ${activeTab === 'durability' ? 'active' : ''}`}
           onClick={() => setActiveTab('durability')}
         >
@@ -1003,8 +994,6 @@ export function App() {
         {activeTab === 'tiering' && <TieringConsole />}
 
         {activeTab === 'explain' && <ExplainVisualizer />}
-
-        {activeTab === 'benchmarks' && <BenchmarkArena />}
 
         {activeTab === 'durability' && (
           <DurabilityConsole
