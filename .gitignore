@@ -31,3 +31,5 @@ studio/dist/
 # Local database runtime data
 data/
 
+# Hackathon temporary extracted slide images
+hackathon_slides/
