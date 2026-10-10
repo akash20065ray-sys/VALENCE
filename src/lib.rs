@@ -19,7 +19,8 @@ pub use protocol::{Command, ParseError, RespEncoder, RespParser};
 pub use server::{ClientConnection, ServerEngine, ServerStats};
 pub use sharding::{
     jump_consistent_hash, murmur3_32, pin_current_thread_to_core, spawn_pinned_worker,
-    AffinityError, CoreId, CpuTopology, ShardRouter,
+    spsc_channel, AffinityError, CachePadded, Consumer, CoreId, CpuTopology, Producer,
+    QueueFull, ShardRouter,
 };
 pub use storage::entry::{CompactKey, CompactValue, Slot, SlotState};
 pub use storage::robin_hood::RobinHoodMap;

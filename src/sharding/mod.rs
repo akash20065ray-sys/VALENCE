@@ -5,6 +5,8 @@
 
 pub mod affinity;
 pub mod router;
+pub mod spsc_ring;
 
 pub use affinity::{pin_current_thread_to_core, spawn_pinned_worker, AffinityError, CoreId, CpuTopology};
 pub use router::{jump_consistent_hash, murmur3_32, ShardRouter};
+pub use spsc_ring::{spsc_channel, CachePadded, Consumer, Producer, QueueFull};
