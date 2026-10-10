@@ -243,7 +243,14 @@ impl Deref for CompactValue {
 
 impl Clone for CompactValue {
     fn clone(&self) -> Self {
-        Self::new(self.as_slice())
+        if self.len == 0xFE {
+            Self {
+                len: 0xFE,
+                data: self.data,
+            }
+        } else {
+            Self::new(self.as_slice())
+        }
     }
 }
 

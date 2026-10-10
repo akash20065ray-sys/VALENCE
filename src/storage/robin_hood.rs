@@ -326,8 +326,8 @@ impl RobinHoodMap {
         let mut next = (curr + 1) & self.mask;
 
         while self.slots[next].is_occupied() && self.slots[next].dib > 0 {
-            // Shift next item backward into curr
-            let mut shifted = self.slots[next].clone();
+            // Shift next item backward into curr using zero-copy mem::replace
+            let mut shifted = std::mem::replace(&mut self.slots[next], Slot::empty());
             shifted.dib -= 1;
             self.slots[curr] = shifted;
 
