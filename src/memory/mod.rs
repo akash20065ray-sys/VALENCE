@@ -8,5 +8,10 @@
 //! - Zero per-object header tax (RSS / Logical RAM < 1.05).
 
 pub mod bitmap;
+pub mod slab_arena;
 
 pub use bitmap::{Bitmap64, BitmapError, MultiBitmap};
+pub use slab_arena::{
+    SlabAllocation, SlabArena, SlabClass, SlabError, SlabStats, CACHELINE_ALIGNMENT,
+    DEFAULT_CHUNK_SIZE, HUGEPAGE_ALIGNMENT, SLAB_SIZE_CLASSES,
+};

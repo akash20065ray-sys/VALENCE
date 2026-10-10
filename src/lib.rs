@@ -18,7 +18,10 @@ pub mod storage;
 pub mod timer;
 pub mod wal;
 
-pub use memory::{Bitmap64, BitmapError, MultiBitmap};
+pub use memory::{
+    Bitmap64, BitmapError, MultiBitmap, SlabAllocation, SlabArena, SlabClass, SlabError,
+    SlabStats, SLAB_SIZE_CLASSES,
+};
 pub use protocol::{Command, ParseError, RespEncoder, RespParser};
 pub use server::{ClientConnection, ServerEngine, ServerStats, ShardedServerEngine, ShardedServerStats};
 pub use sharding::{
