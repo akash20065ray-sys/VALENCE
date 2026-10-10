@@ -82,6 +82,16 @@ impl RobinHoodMap {
         self.epoch
     }
 
+    /// Returns a reference to the raw slot at the specified index, if within bounds.
+    #[inline(always)]
+    pub fn slot_at(&self, idx: usize) -> Option<&Slot> {
+        if idx < self.capacity {
+            Some(&self.slots[idx])
+        } else {
+            None
+        }
+    }
+
     /// Retrieves a value slice by key.
     ///
     /// Exploits Robin Hood ordering for early termination:

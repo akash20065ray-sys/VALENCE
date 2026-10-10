@@ -25,8 +25,9 @@ pub use sharding::{
     ShardResult, ShardRouter,
 };
 pub use snapshot::{
-    Epoch, EpochTracker, PreUpdateAction, SnapshotError, SnapshotId, SnapshotMetadata,
-    SnapshotRegistry, SnapshotStatus, EPOCH_INIT, EPOCH_ZERO,
+    Epoch, EpochTracker, PreUpdateAction, ShadowBuffer, SnapshotError, SnapshotId,
+    SnapshotItem, SnapshotMetadata, SnapshotRegistry, SnapshotScanner, SnapshotStatus,
+    SnapshotStreamStats, EPOCH_INIT, EPOCH_ZERO,
 };
 pub use storage::entry::{CompactKey, CompactValue, Slot, SlotState};
 pub use storage::robin_hood::RobinHoodMap;
