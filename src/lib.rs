@@ -39,8 +39,9 @@ pub use snapshot::{
 };
 pub use storage::entry::{CompactKey, CompactValue, Slot, SlotState};
 pub use tiering::{
-    AlignedBlockBuffer, BlockPagingEngine, ClockArray, ClockTracker, ColdCandidate, DiskPointer,
-    TieringError, BLOCK_SIZE, EXTENT_MAGIC,
+    AlignedBlockBuffer, BlockPagingEngine, ClockArray, ClockTracker, ColdCandidate,
+    DEFAULT_PROMOTION_THRESHOLD, DiskPointer, TieredStorageEngine, TieredValue, TieringError,
+    TieringStats, BLOCK_SIZE, EXTENT_MAGIC,
 };
 pub use wal::{
     format_segment_filename, parse_segment_id, SyncPolicy, WalError, WalOp, WalRecord,

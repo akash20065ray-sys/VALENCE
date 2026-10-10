@@ -7,8 +7,12 @@
 
 pub mod clock;
 pub mod io_uring;
+pub mod cache_promotion;
 
 pub use clock::{ClockArray, ClockTracker, ColdCandidate};
 pub use io_uring::{
     AlignedBlockBuffer, BlockPagingEngine, DiskPointer, TieringError, BLOCK_SIZE, EXTENT_MAGIC,
+};
+pub use cache_promotion::{
+    TieredStorageEngine, TieredValue, TieringStats, DEFAULT_PROMOTION_THRESHOLD,
 };
