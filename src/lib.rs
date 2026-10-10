@@ -9,6 +9,7 @@
 //! 6. Allocator Fragmentation -> Small Value Inlining (SSO) & 2MB Geometric Slab Arenas
 //! 7. Replication Overrun -> Segmented NVMe WAL with Kernel-Assisted Streaming
 
+pub mod memory;
 pub mod protocol;
 pub mod server;
 pub mod sharding;
@@ -17,6 +18,7 @@ pub mod storage;
 pub mod timer;
 pub mod wal;
 
+pub use memory::{Bitmap64, BitmapError, MultiBitmap};
 pub use protocol::{Command, ParseError, RespEncoder, RespParser};
 pub use server::{ClientConnection, ServerEngine, ServerStats, ShardedServerEngine, ShardedServerStats};
 pub use sharding::{
