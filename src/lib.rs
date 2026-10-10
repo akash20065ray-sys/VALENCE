@@ -20,7 +20,8 @@ pub use server::{ClientConnection, ServerEngine, ServerStats};
 pub use sharding::{
     jump_consistent_hash, murmur3_32, pin_current_thread_to_core, spawn_pinned_worker,
     spsc_channel, AffinityError, CachePadded, Consumer, CoreId, CpuTopology, Producer,
-    QueueFull, ShardRouter,
+    QueueFull, ShardCoordinator, ShardError, ShardOp, ShardRequest, ShardResponse,
+    ShardResult, ShardRouter,
 };
 pub use storage::entry::{CompactKey, CompactValue, Slot, SlotState};
 pub use storage::robin_hood::RobinHoodMap;

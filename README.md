@@ -4,7 +4,7 @@
 [![Protocol: RESP3](https://img.shields.io/badge/Protocol-RESP2%20%2F%20RESP3-blue.svg)](https://redis.io/docs/reference/protocol-spec/)
 [![Snapshots: Zero-Fork](https://img.shields.io/badge/Snapshots-Zero--Fork%20Epochs-success.svg)]()
 [![TTL: 4-Tier HTW](https://img.shields.io/badge/TTL%20Engine-4--Tier%20Hierarchical%20Wheel-brightgreen.svg)]()
-[![Tests: 35 Passing](https://img.shields.io/badge/Tests-35%2F35%20Passing-brightgreen.svg)]()
+[![Tests: 39 Passing](https://img.shields.io/badge/Tests-39%2F39%20Passing-brightgreen.svg)]()
 [![License: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)]()
 
 > **Valence** is a high-performance in-memory state engine engineered from first principles in pure, safe Rust. Designed as a drop-in replacement for Redis and Valkey workloads, Valence is architecturally constructed to eliminate the seven systemic bottlenecks that have degraded incumbent in-memory engines for over a decade in hyperscale cloud infrastructure.
@@ -324,7 +324,7 @@ cargo test
 
 Verification output:
 ```text
-running 32 tests (lib unit tests)
+running 36 tests (lib unit tests)
 test storage::entry::tests::test_slot_size_and_alignment ... ok
 test storage::entry::tests::test_small_value_inlining ......... ok
 test storage::entry::tests::test_large_value_heap_fallback .... ok
@@ -357,13 +357,17 @@ test sharding::spsc_ring::tests::test_single_threaded_push_pop  ok
 test sharding::spsc_ring::tests::test_wrap_around_ring ........ ok
 test sharding::spsc_ring::tests::test_drop_unconsumed_items ... ok
 test sharding::spsc_ring::tests::test_multithreaded_spsc_stress ok
+test sharding::coordinator::tests::test_coordinator_lifecycle_and_single_key_crud ok
+test sharding::coordinator::tests::test_coordinator_ttl_expiration ok
+test sharding::coordinator::tests::test_deterministic_mget_and_mset ok
+test sharding::coordinator::tests::test_cross_shard_high_concurrency ok
 
 running 3 tests (server network integration tests)
 test test_pipelined_tcp_requests .............................. ok
 test test_server_tcp_e2e_commands ............................. ok
 test test_tcp_expiration_via_timing_wheel ..................... ok
 
-Test result: ok. 35 passed; 0 failed; 0 ignored; finished in 0.70s
+Test result: ok. 39 passed; 0 failed; 0 ignored; finished in 0.95s
 ```
 
 ---
