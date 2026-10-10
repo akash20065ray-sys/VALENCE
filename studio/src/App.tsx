@@ -12,12 +12,18 @@ import {
   CheckCircle2,
   FileText,
   ShieldCheck,
+  HardDrive,
+  Zap,
+  BarChart3,
 } from 'lucide-react';
 import { KeyspaceBrowser } from './components/KeyspaceBrowser';
 import { ClusterTopology } from './components/ClusterTopology';
 import { DurabilityConsole } from './components/DurabilityConsole';
 import { ActivityProfiler } from './components/ActivityProfiler';
 import { RespWorkbench } from './components/RespWorkbench';
+import { TieringConsole } from './components/TieringConsole';
+import { ExplainVisualizer } from './components/ExplainVisualizer';
+import { BenchmarkArena } from './components/BenchmarkArena';
 import type {
   ShardData,
   KeyspaceItem,
@@ -33,9 +39,9 @@ import type {
 import { routeKey } from './utils/router';
 
 export function App() {
-  // Navigation: 5 Core Pillars of Enterprise In-Memory Database
+  // Navigation: 8 Architectural Pillars of Enterprise In-Memory Database
   const [activeTab, setActiveTab] = useState<
-    'keyspace' | 'topology' | 'durability' | 'profiler' | 'workbench'
+    'keyspace' | 'topology' | 'tiering' | 'explain' | 'benchmarks' | 'durability' | 'profiler' | 'workbench'
   >('keyspace');
 
   // Theme Mode: Default is 'slate' (balanced industrial mid-tone slate)
@@ -915,7 +921,7 @@ export function App() {
         </div>
       </nav>
 
-      {/* Subnav Tabs: 5 Essential Enterprise Database Console Pillars */}
+      {/* Subnav Tabs: 8 Architectural Pillars of Enterprise In-Memory Database */}
       <div className="tab-nav">
         <button
           className={`tab-btn ${activeTab === 'keyspace' ? 'active' : ''}`}
@@ -929,6 +935,27 @@ export function App() {
           onClick={() => setActiveTab('topology')}
         >
           <Cpu size={14} /> Cluster Topology & Memory
+        </button>
+
+        <button
+          className={`tab-btn ${activeTab === 'tiering' ? 'active' : ''}`}
+          onClick={() => setActiveTab('tiering')}
+        >
+          <HardDrive size={14} /> NVMe Tiering (79% Cut)
+        </button>
+
+        <button
+          className={`tab-btn ${activeTab === 'explain' ? 'active' : ''}`}
+          onClick={() => setActiveTab('explain')}
+        >
+          <Zap size={14} /> Query Plan (--explain)
+        </button>
+
+        <button
+          className={`tab-btn ${activeTab === 'benchmarks' ? 'active' : ''}`}
+          onClick={() => setActiveTab('benchmarks')}
+        >
+          <BarChart3 size={14} /> Benchmark Arena
         </button>
 
         <button
@@ -972,6 +999,12 @@ export function App() {
             walState={walState}
           />
         )}
+
+        {activeTab === 'tiering' && <TieringConsole />}
+
+        {activeTab === 'explain' && <ExplainVisualizer />}
+
+        {activeTab === 'benchmarks' && <BenchmarkArena />}
 
         {activeTab === 'durability' && (
           <DurabilityConsole
