@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Cpu,
   Clock,
@@ -19,70 +19,62 @@ import { routeKey } from './utils/router';
 export function App() {
   const [activeTab, setActiveTab] = useState<'shards' | 'wheel' | 'chaos' | 'keys' | 'terminal'>('shards');
 
-  // Initial Shard Data (4 Cores)
-  const [shards, setShards] = useState<ShardData[]>([
-    { id: 0, coreId: 0, keyCount: 2540, opsPerSec: 38200, queueDepth: 8, queueCapacity: 1024, skewPercent: 0.2, isPinned: true },
-    { id: 1, coreId: 1, keyCount: 2510, opsPerSec: 39100, queueDepth: 12, queueCapacity: 1024, skewPercent: 0.4, isPinned: true },
-    { id: 2, coreId: 2, keyCount: 2580, opsPerSec: 37900, queueDepth: 4, queueCapacity: 1024, skewPercent: 0.3, isPinned: true },
-    { id: 3, coreId: 3, keyCount: 2490, opsPerSec: 40100, queueDepth: 15, queueCapacity: 1024, skewPercent: 0.6, isPinned: true },
-  ]);
-
-  // Initial Keyspace
+  // General-Purpose In-Memory State across diverse application workloads
   const [keyspace, setKeyspace] = useState<KeyspaceItem[]>([
     {
-      key: 'user:session:991',
-      value: 'active_auth_tk',
-      sizeBytes: 14,
-      isSso: true,
-      dib: 2,
+      key: 'auth:jwt:session_991',
+      value: 'eyJhGciOiJIUzI1NiJ9.payload',
+      sizeBytes: 28,
+      isSso: false,
+      dib: 1,
       epoch: 1,
-      ttlMs: 45000,
-      expiresAt: Date.now() + 45000,
-      targetShard: routeKey('user:session:991', 4),
+      ttlMs: 3600000,
+      expiresAt: Date.now() + 3600000,
+      targetShard: routeKey('auth:jwt:session_991', 4),
     },
     {
-      key: 'ip:limit:10.0.1.5',
-      value: '42',
+      key: 'ratelimit:api:10.0.1.5',
+      value: '14',
       sizeBytes: 2,
       isSso: true,
       dib: 0,
       epoch: 1,
       ttlMs: 60000,
       expiresAt: Date.now() + 60000,
-      targetShard: routeKey('ip:limit:10.0.1.5', 4),
+      targetShard: routeKey('ratelimit:api:10.0.1.5', 4),
     },
     {
-      key: 'app:config:flags',
-      value: '{"debug":false,"tracing":true,"zero_fork":true}',
-      sizeBytes: 48,
-      isSso: false,
-      dib: 4,
-      epoch: 2,
+      key: 'cache:query:digest_fa7',
+      value: 'res_hash_89a1b',
+      sizeBytes: 14,
+      isSso: true,
+      dib: 3,
+      epoch: 1,
       ttlMs: null,
       expiresAt: null,
-      targetShard: routeKey('app:config:flags', 4),
+      targetShard: routeKey('cache:query:digest_fa7', 4),
     },
     {
-      key: 'dev:sensor:node_3',
-      value: 'temp_22.4c',
-      sizeBytes: 10,
+      key: 'lock:distributed:leader_node',
+      value: 'worker_04',
+      sizeBytes: 9,
+      isSso: true,
+      dib: 2,
+      epoch: 2,
+      ttlMs: 15000,
+      expiresAt: Date.now() + 15000,
+      targetShard: routeKey('lock:distributed:leader_node', 4),
+    },
+    {
+      key: 'llm:ctx:session_881',
+      value: 'context_tokens_v3',
+      sizeBytes: 17,
       isSso: true,
       dib: 1,
       epoch: 1,
-      ttlMs: 12000,
-      expiresAt: Date.now() + 12000,
-      targetShard: routeKey('dev:sensor:node_3', 4),
-    },
-    {
-      key: 'cart:checkout:902',
-      value: 'item_list_payload',
-      sizeBytes: 17,
-      isSso: true,
-      dib: 3,
-      epoch: 3,
       ttlMs: null,
       expiresAt: null,
-      targetShard: routeKey('cart:checkout:902', 4),
+      targetShard: routeKey('llm:ctx:session_881', 4),
     },
   ]);
 
@@ -99,26 +91,29 @@ export function App() {
     {
       id: '2',
       timestamp: new Date().toLocaleTimeString(),
-      command: 'SET user:session:991 "active_auth_tk" PX 45000',
+      command: 'SET ratelimit:api:10.0.1.5 "14" PX 60000',
       response: '+OK',
-      durationUs: 12.8,
+      durationUs: 8.6,
       isError: false,
     },
   ]);
 
-  // Periodic Telemetry Simulation
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setShards((prev) =>
-        prev.map((s) => ({
-          ...s,
-          opsPerSec: Math.round(36000 + Math.random() * 6000),
-          queueDepth: Math.max(0, Math.min(1024, s.queueDepth + Math.floor(Math.random() * 5) - 2)),
-        }))
-      );
-    }, 1500);
-    return () => clearInterval(timer);
-  }, []);
+  const [opsCount, setOpsCount] = useState<number>(2);
+
+  // Compute exact shard counts statically from active keyspace
+  const shards: ShardData[] = [0, 1, 2, 3].map((shardId) => {
+    const keysInShard = keyspace.filter((k) => k.targetShard === shardId).length;
+    return {
+      id: shardId,
+      coreId: shardId,
+      keyCount: keysInShard,
+      opsPerSec: 0, // Static 0 when idle/standby
+      queueDepth: 0, // Static 0 when idle
+      queueCapacity: 1024,
+      skewPercent: 0.0,
+      isPinned: true,
+    };
+  });
 
   // Set Key Handler
   const handleSetKey = (key: string, value: string, ttlMs: number | null) => {
@@ -130,7 +125,7 @@ export function App() {
       value,
       sizeBytes: value.length,
       isSso,
-      dib: Math.floor(Math.random() * 6),
+      dib: Math.floor(Math.random() * 4),
       epoch: 1,
       ttlMs,
       expiresAt: ttlMs ? Date.now() + ttlMs : null,
@@ -138,32 +133,13 @@ export function App() {
     };
 
     setKeyspace((prev) => [newItem, ...prev.filter((i) => i.key !== key)]);
-
-    setShards((prev) =>
-      prev.map((s) => (s.id === targetShard ? { ...s, keyCount: s.keyCount + 1 } : s))
-    );
+    setOpsCount((prev) => prev + 1);
   };
 
   // Delete Key Handler (O(1) Backshift)
   const handleDeleteKey = (key: string) => {
-    const target = keyspace.find((k) => k.key === key);
-    if (!target) return;
-
     setKeyspace((prev) => prev.filter((k) => k.key !== key));
-    setShards((prev) =>
-      prev.map((s) => (s.id === target.targetShard ? { ...s, keyCount: Math.max(0, s.keyCount - 1) } : s))
-    );
-  };
-
-  // Bulk 10k Keys Distribution Simulation
-  const handleAddSampleKeys = () => {
-    setShards((prev) =>
-      prev.map((s) => ({
-        ...s,
-        keyCount: s.keyCount + 2500,
-        opsPerSec: s.opsPerSec + 12000,
-      }))
-    );
+    setOpsCount((prev) => prev + 1);
   };
 
   // Terminal Command Dispatcher
@@ -266,7 +242,7 @@ export function App() {
         break;
 
       case 'INFO':
-        response = `# Server\nvalence_version:0.1.0\narch:thread_per_core_shared_nothing\nshards:${shards.length}\n\n# Memory\nsso_inlined_ratio:${Math.round((keyspace.filter(k => k.isSso).length / Math.max(1, keyspace.length)) * 100)}%\nslot_size_bytes:64\nfalse_sharing_eliminated:true\n\n# Expiration\ntiming_wheel_tiers:4\navalanche_immunity:active`;
+        response = `# Server\nvalence_version:0.1.0\narch:thread_per_core_shared_nothing\nshards:${shards.length}\nstate:standby_connected\n\n# Memory\nkeys_total:${keyspace.length}\nsso_inlined_ratio:${Math.round((keyspace.filter(k => k.isSso).length / Math.max(1, keyspace.length)) * 100)}%\nslot_size_bytes:64\n\n# Expiration\ntiming_wheel_tiers:4\nresolution:1ms`;
         break;
 
       default:
@@ -275,7 +251,8 @@ export function App() {
         break;
     }
 
-    const durationUs = Math.max(1.8, (performance.now() - start) * 1000 + Math.random() * 8);
+    const durationUs = Math.max(2.1, (performance.now() - start) * 1000 + Math.random() * 6);
+    setOpsCount((prev) => prev + 1);
 
     setCommandLogs((prev) => [
       ...prev,
@@ -290,11 +267,9 @@ export function App() {
     ]);
   };
 
-  const totalOps = shards.reduce((acc, s) => acc + s.opsPerSec, 0);
-
   return (
     <div className="app-container">
-      {/* Top Industrial Navbar */}
+      {/* Top Navbar */}
       <nav className="top-nav">
         <div className="brand-section">
           <div className="brand-logo">
@@ -303,27 +278,33 @@ export function App() {
           </div>
           <span className="brand-badge">STUDIO</span>
           <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-            v0.1.0-alpha
+            v0.1.0
           </span>
         </div>
 
         <div className="cluster-stats-strip">
           <div className="stat-pill">
             <span className="health-dot" />
-            <span>STATUS:</span>
-            <span className="val" style={{ color: 'var(--accent-green)' }}>ONLINE</span>
+            <span>ENGINE:</span>
+            <span className="val" style={{ color: 'var(--accent-green)' }}>ONLINE (STANDBY)</span>
           </div>
 
           <div className="stat-pill">
             <Cpu size={13} color="var(--accent-amber)" />
             <span>SHARDS:</span>
-            <span className="val">{shards.length} Pinned Cores</span>
+            <span className="val">{shards.length} Cores (Pinned)</span>
+          </div>
+
+          <div className="stat-pill">
+            <Database size={13} color="var(--text-muted)" />
+            <span>STORED KEYS:</span>
+            <span className="val">{keyspace.length}</span>
           </div>
 
           <div className="stat-pill">
             <Zap size={13} color="var(--accent-amber)" />
-            <span>THROUGHPUT:</span>
-            <span className="val">{totalOps.toLocaleString()} ops/s</span>
+            <span>COMMANDS RUN:</span>
+            <span className="val">{opsCount}</span>
           </div>
 
           <div className="stat-pill">
@@ -375,7 +356,7 @@ export function App() {
       {/* Main Tab Content */}
       <main className="main-content">
         {activeTab === 'shards' && (
-          <ShardMatrix shards={shards} onAddSampleKeys={handleAddSampleKeys} />
+          <ShardMatrix shards={shards} />
         )}
 
         {activeTab === 'wheel' && (

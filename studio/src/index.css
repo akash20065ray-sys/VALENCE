@@ -1,35 +1,38 @@
-/* Valence Engine Studio — Industrial Systems Design Tokens */
+/* Valence Engine Studio — Mid-Tone Professional Slate / Titanium Theme (GitHub Dimmed Style) */
 :root {
-  --bg-core: #090B0E;
-  --bg-surface: #0E1219;
-  --bg-card: #131722;
-  --bg-card-hover: #181E2C;
-  --bg-elevated: #1D2333;
+  /* Mid-Tone Titanium & Slate Palette — Neither pitch black nor bright white */
+  --bg-core: #191E24;
+  --bg-surface: #1F252E;
+  --bg-card: #232B35;
+  --bg-card-hover: #2A3340;
+  --bg-elevated: #2D3745;
 
-  --border-subtle: #1C2230;
-  --border-default: #252D40;
-  --border-focus: #37435F;
+  --border-subtle: #2D3644;
+  --border-default: #384354;
+  --border-focus: #4F5E75;
 
   --accent-amber: #F97316;
-  --accent-amber-glow: rgba(249, 115, 22, 0.15);
   --accent-amber-dim: #C2410C;
+  --accent-amber-bg: rgba(249, 115, 22, 0.12);
 
   --accent-green: #10B981;
-  --accent-green-glow: rgba(16, 185, 129, 0.15);
-  --accent-green-dim: #047857;
+  --accent-green-bg: rgba(16, 185, 129, 0.12);
 
   --accent-red: #EF4444;
-  --accent-red-glow: rgba(239, 68, 68, 0.15);
+  --accent-red-bg: rgba(239, 68, 68, 0.12);
 
-  --accent-cyan: #06B6D4;
+  --accent-cyan: #38BDF8;
 
-  --text-primary: #F8FAFC;
-  --text-secondary: #94A3B8;
-  --text-muted: #64748B;
-  --text-dim: #475569;
+  --text-primary: #F1F5F9;
+  --text-secondary: #A0ABC0;
+  --text-muted: #718096;
+  --text-dim: #4A5568;
 
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', Menlo, Monaco, Consolas, monospace;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
 }
 
 * {
@@ -73,10 +76,11 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  background-color: var(--bg-core);
 }
 
 .top-nav {
-  height: 56px;
+  height: 60px;
   background-color: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
@@ -86,6 +90,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 50;
+  box-shadow: var(--shadow-sm);
 }
 
 .brand-section {
@@ -105,7 +110,7 @@ body {
 }
 
 .brand-badge {
-  background: rgba(249, 115, 22, 0.12);
+  background: var(--accent-amber-bg);
   color: var(--accent-amber);
   border: 1px solid rgba(249, 115, 22, 0.3);
   font-size: 11px;
@@ -120,7 +125,7 @@ body {
 .cluster-stats-strip {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
 }
 
 .stat-pill {
@@ -129,8 +134,8 @@ body {
   gap: 8px;
   font-size: 12px;
   color: var(--text-secondary);
-  background: var(--bg-card);
-  padding: 4px 10px;
+  background: var(--bg-elevated);
+  padding: 5px 12px;
   border-radius: 6px;
   border: 1px solid var(--border-subtle);
   font-family: var(--font-mono);
@@ -146,26 +151,20 @@ body {
   height: 8px;
   border-radius: 50%;
   background-color: var(--accent-green);
-  box-shadow: 0 0 8px var(--accent-green);
-  animation: pulse-health 2s infinite ease-in-out;
-}
-
-@keyframes pulse-health {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(0.9); }
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
 }
 
 .tab-nav {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   background-color: var(--bg-surface);
-  padding: 6px 24px;
+  padding: 8px 24px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .tab-btn {
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
@@ -186,8 +185,8 @@ body {
 .tab-btn.active {
   color: var(--accent-amber);
   background-color: var(--bg-card);
+  border-color: var(--border-default);
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px var(--border-default);
 }
 
 .main-content {
@@ -205,7 +204,8 @@ body {
   border-radius: 8px;
   padding: 20px;
   position: relative;
-  transition: border-color 0.15s ease;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .card:hover {
@@ -266,7 +266,7 @@ body {
   .cluster-stats-strip { display: none; }
 }
 
-/* Monospace Terminal / Code Elements */
+/* Monospace Elements */
 .mono-text {
   font-family: var(--font-mono);
 }
@@ -316,7 +316,7 @@ body {
 }
 
 .btn-danger {
-  background-color: var(--accent-red-glow);
+  background-color: var(--accent-red-bg);
   color: var(--accent-red);
   border: 1px solid rgba(239, 68, 68, 0.3);
   font-weight: 600;

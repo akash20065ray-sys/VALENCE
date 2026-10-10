@@ -5,10 +5,9 @@ import { murmur3_32, routeKey, routeKeyJump } from '../utils/router';
 
 interface ShardMatrixProps {
   shards: ShardData[];
-  onAddSampleKeys: () => void;
 }
 
-export const ShardMatrix: React.FC<ShardMatrixProps> = ({ shards, onAddSampleKeys }) => {
+export const ShardMatrix: React.FC<ShardMatrixProps> = ({ shards }) => {
   const [testKey, setTestKey] = useState('session:token:9482');
 
   const hash32 = murmur3_32(testKey);
@@ -38,7 +37,7 @@ export const ShardMatrix: React.FC<ShardMatrixProps> = ({ shards, onAddSampleKey
             {totalOps.toLocaleString()} <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>ops/s</span>
           </div>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Contention across shards: 0.00%
+            Idle (Awaiting Application Traffic)
           </div>
         </div>
 
@@ -74,9 +73,9 @@ export const ShardMatrix: React.FC<ShardMatrixProps> = ({ shards, onAddSampleKey
               Each shard owns an isolated Robin Hood memory array and Timing Wheel. Zero lock synchronization.
             </div>
           </div>
-          <button className="btn-secondary" onClick={onAddSampleKeys}>
-            <Zap size={14} color="var(--accent-amber)" /> Distribute 10,000 Keys
-          </button>
+          <span className="brand-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <Zap size={12} /> SHARED-NOTHING ACTORS
+          </span>
         </div>
 
         <div className="grid-4" style={{ gap: '16px' }}>
