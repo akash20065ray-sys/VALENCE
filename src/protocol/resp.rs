@@ -306,15 +306,10 @@ impl RespParser {
     }
 }
 
-/// Fast search for `\r\n` delimiter within a byte slice.
+/// Fast search for `\r\n` delimiter within a byte slice using SIMD AVX2.
 #[inline(always)]
 fn find_crlf(buf: &[u8]) -> Option<usize> {
-    for i in 0..buf.len().saturating_sub(1) {
-        if buf[i] == b'\r' && buf[i + 1] == b'\n' {
-            return Some(i);
-        }
-    }
-    None
+    super::simd::find_crlf(buf)
 }
 
 /// Case-insensitive ASCII slice comparison.

@@ -23,7 +23,7 @@ pub use memory::{
     Bitmap64, BitmapError, MultiBitmap, SlabAllocation, SlabArena, SlabClass, SlabError,
     SlabStats, SLAB_SIZE_CLASSES,
 };
-pub use protocol::{Command, ParseError, RespEncoder, RespParser};
+pub use protocol::{Command, ParseError, RespEncoder, RespParser, find_crlf};
 pub use server::{ClientConnection, ServerEngine, ServerStats, ShardedServerEngine, ShardedServerStats};
 pub use sharding::{
     jump_consistent_hash, murmur3_32, pin_current_thread_to_core, spawn_pinned_worker,
