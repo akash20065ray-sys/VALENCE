@@ -53,5 +53,42 @@ export interface WalState {
   totalSegments: number;
   segmentSizeBytes: number;
   status: 'active' | 'recovering';
+  pendingFsyncCount: number;
+  groupCommitBatches: number;
+  avgFlushLatencyUs: number;
 }
+
+export interface WalRecordView {
+  lsn: number;
+  epoch: number;
+  op: 'SET' | 'DEL' | 'EXPIRE' | 'CHECKPOINT';
+  key: string;
+  valPreview: string;
+  sizeBytes: number;
+  crc64Hex: string;
+  timestamp: string;
+}
+
+export interface WalSegmentView {
+  id: number;
+  filename: string;
+  startLsn: number;
+  endLsn: number;
+  sizeBytes: number;
+  maxSizeBytes: number;
+  status: 'active' | 'sealed';
+  createdAt: string;
+}
+
+export interface WalRecoveryReportView {
+  recordsReplayed: number;
+  maxLsn: number;
+  truncatedBytes: number;
+  corruptedSegments: number;
+  elapsedMs: number;
+  timestamp: string;
+}
+
+export type WorkloadMode = 'idle' | 'oltp' | 'stress';
+
 

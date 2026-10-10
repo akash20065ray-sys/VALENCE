@@ -11,17 +11,32 @@ import {
   Save,
   CheckCircle2,
   FileText,
+  ShieldCheck,
 } from 'lucide-react';
 import { KeyspaceBrowser } from './components/KeyspaceBrowser';
 import { ClusterTopology } from './components/ClusterTopology';
+import { DurabilityConsole } from './components/DurabilityConsole';
 import { ActivityProfiler } from './components/ActivityProfiler';
 import { RespWorkbench } from './components/RespWorkbench';
-import type { ShardData, KeyspaceItem, CommandLog, ThemeMode, SnapshotRecord, WalState } from './types';
+import type {
+  ShardData,
+  KeyspaceItem,
+  CommandLog,
+  ThemeMode,
+  SnapshotRecord,
+  WalState,
+  WalRecordView,
+  WalSegmentView,
+  WalRecoveryReportView,
+  WorkloadMode,
+} from './types';
 import { routeKey } from './utils/router';
 
 export function App() {
-  // Navigation: 4 Core Pillars of Enterprise In-Memory Database
-  const [activeTab, setActiveTab] = useState<'keyspace' | 'topology' | 'profiler' | 'workbench'>('keyspace');
+  // Navigation: 5 Core Pillars of Enterprise In-Memory Database
+  const [activeTab, setActiveTab] = useState<
+    'keyspace' | 'topology' | 'durability' | 'profiler' | 'workbench'
+  >('keyspace');
 
   // Theme Mode: Default is 'slate' (balanced industrial mid-tone slate)
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -52,9 +67,174 @@ export function App() {
     syncPolicy: 'GroupCommit',
     activeSegment: 'wal_0000000000000001.valwal',
     totalSegments: 1,
-    segmentSizeBytes: 67108864,
+    segmentSizeBytes: 67108864, // 64MB boundary
     status: 'active',
+    pendingFsyncCount: 0,
+    groupCommitBatches: 84,
+    avgFlushLatencyUs: 48,
   });
+
+  // On-disk WAL Segments Catalog
+  const [walSegments, setWalSegments] = useState<WalSegmentView[]>([
+    {
+      id: 1,
+      filename: 'wal_0000000000000001.valwal',
+      startLsn: 1,
+      endLsn: 13,
+      sizeBytes: 1420,
+      maxSizeBytes: 67108864,
+      status: 'active',
+      createdAt: '11:15:00',
+    },
+  ]);
+
+  // Initial Seed Binary WAL Records
+  const [walRecords, setWalRecords] = useState<WalRecordView[]>([
+    {
+      lsn: 13,
+      epoch: 1,
+      op: 'CHECKPOINT',
+      key: 'system:checkpoint',
+      valPreview: 'lsn_cutoff: 12',
+      sizeBytes: 40,
+      crc64Hex: '0x9E4B8F21A7C3D015',
+      timestamp: '11:15:26',
+    },
+    {
+      lsn: 12,
+      epoch: 1,
+      op: 'DEL',
+      key: 'user:5',
+      valPreview: 'tombstone: true',
+      sizeBytes: 22,
+      crc64Hex: '0x1C5A8F90E2D3B748',
+      timestamp: '11:15:24',
+    },
+    {
+      lsn: 11,
+      epoch: 1,
+      op: 'EXPIRE',
+      key: 'ratelimit:api:10.0.1.5',
+      valPreview: 'ttl_ms: 60000',
+      sizeBytes: 26,
+      crc64Hex: '0xDF810B2A3E7C9451',
+      timestamp: '11:15:22',
+    },
+    {
+      lsn: 10,
+      epoch: 1,
+      op: 'SET',
+      key: 'shard:b',
+      valPreview: 'val_b',
+      sizeBytes: 24,
+      crc64Hex: '0x2B4A7C91EF380D65',
+      timestamp: '11:15:20',
+    },
+    {
+      lsn: 9,
+      epoch: 1,
+      op: 'SET',
+      key: 'shard:a',
+      valPreview: 'val_a',
+      sizeBytes: 24,
+      crc64Hex: '0x5C1F8E3A9D20B746',
+      timestamp: '11:15:18',
+    },
+    {
+      lsn: 8,
+      epoch: 1,
+      op: 'SET',
+      key: 'user:2',
+      valPreview: 'profile_data_2',
+      sizeBytes: 32,
+      crc64Hex: '0x9E70C58B3A1D4F28',
+      timestamp: '11:15:16',
+    },
+    {
+      lsn: 7,
+      epoch: 1,
+      op: 'SET',
+      key: 'user:1',
+      valPreview: 'profile_data_1',
+      sizeBytes: 32,
+      crc64Hex: '0x4D8E2A1B7F0C3956',
+      timestamp: '11:15:14',
+    },
+    {
+      lsn: 6,
+      epoch: 1,
+      op: 'SET',
+      key: 'telemetry:node:mem_pct',
+      valPreview: '42.8',
+      sizeBytes: 30,
+      crc64Hex: '0x6A3B91EF02C7845D',
+      timestamp: '11:15:12',
+    },
+    {
+      lsn: 5,
+      epoch: 1,
+      op: 'SET',
+      key: 'llm:ctx:session_881',
+      valPreview: 'context_tokens_v3',
+      sizeBytes: 38,
+      crc64Hex: '0x19DF7B0C5E832A41',
+      timestamp: '11:15:10',
+    },
+    {
+      lsn: 4,
+      epoch: 1,
+      op: 'SET',
+      key: 'lock:distributed:leader_node',
+      valPreview: 'worker_04',
+      sizeBytes: 34,
+      crc64Hex: '0x7C50BA3E2F814D90',
+      timestamp: '11:15:08',
+    },
+    {
+      lsn: 3,
+      epoch: 1,
+      op: 'SET',
+      key: 'cache:query:digest_fa7',
+      valPreview: 'res_hash_89a1b',
+      sizeBytes: 36,
+      crc64Hex: '0xA1E4D078B5C92314',
+      timestamp: '11:15:06',
+    },
+    {
+      lsn: 2,
+      epoch: 1,
+      op: 'SET',
+      key: 'ratelimit:api:10.0.1.5',
+      valPreview: '14',
+      sizeBytes: 28,
+      crc64Hex: '0x8B2C4F1A9D3E7105',
+      timestamp: '11:15:04',
+    },
+    {
+      lsn: 1,
+      epoch: 1,
+      op: 'SET',
+      key: 'auth:jwt:session_991',
+      valPreview: 'eyJhGciOiJIUzI1NiJ9.payload',
+      sizeBytes: 42,
+      crc64Hex: '0x3F81C92B4A1D8E70',
+      timestamp: '11:15:02',
+    },
+  ]);
+
+  // Last Crash Recovery Report (simulated or initial state)
+  const [lastRecoveryReport, setLastRecoveryReport] = useState<WalRecoveryReportView | null>({
+    recordsReplayed: 13,
+    maxLsn: 13,
+    truncatedBytes: 0,
+    corruptedSegments: 0,
+    elapsedMs: 1.15,
+    timestamp: new Date().toLocaleTimeString(),
+  });
+
+  // Workload Generator Mode & Dynamic Telemetry
+  const [workloadMode, setWorkloadMode] = useState<WorkloadMode>('idle');
+  const [opsPerSec, setOpsPerSec] = useState<number>(0);
 
   // General-Purpose In-Memory State across diverse application domains
   const [keyspace, setKeyspace] = useState<KeyspaceItem[]>([
@@ -160,15 +340,15 @@ export function App() {
     },
   ]);
 
-  // Shards computed statically from active keyspace
+  // Shards computed dynamically from active keyspace
   const shards: ShardData[] = [0, 1, 2, 3].map((shardId) => {
     const keysInShard = keyspace.filter((k) => k.targetShard === shardId).length;
     return {
       id: shardId,
       coreId: shardId,
       keyCount: keysInShard,
-      opsPerSec: 0, // Grounded 0 when idle/standby
-      queueDepth: 0, // Grounded 0 when idle
+      opsPerSec: workloadMode === 'idle' ? 0 : Math.round(opsPerSec / 4),
+      queueDepth: workloadMode === 'idle' ? 0 : Math.floor(Math.random() * 8),
       queueCapacity: 1024,
       skewPercent: 0.0,
       isPinned: true,
@@ -183,8 +363,14 @@ export function App() {
     const isSso = key.length <= 15 && value.length <= 23;
     const targetShard = routeKey(key, shards.length);
     const nextEpoch = epoch + 1;
+    const nextLsn = walState.currentLsn + 1;
+
     setEpoch(nextEpoch);
-    setWalState((prev) => ({ ...prev, currentLsn: prev.currentLsn + 1 }));
+    setWalState((prev) => ({
+      ...prev,
+      currentLsn: nextLsn,
+      groupCommitBatches: prev.groupCommitBatches + 1,
+    }));
 
     const newItem: KeyspaceItem = {
       key,
@@ -200,6 +386,33 @@ export function App() {
     };
 
     setKeyspace((prev) => [newItem, ...prev.filter((i) => i.key !== key)]);
+
+    // Append to live WAL binary frame stream
+    const walRec: WalRecordView = {
+      lsn: nextLsn,
+      epoch: nextEpoch,
+      op: 'SET',
+      key,
+      valPreview: value,
+      sizeBytes: 25 + key.length + value.length,
+      crc64Hex:
+        '0x' +
+        Math.floor(Math.random() * 0xffffffffff)
+          .toString(16)
+          .padStart(16, 'A')
+          .toUpperCase(),
+      timestamp: new Date().toLocaleTimeString(),
+    };
+    setWalRecords((prev) => [walRec, ...prev.slice(0, 49)]);
+
+    // Update active segment size
+    setWalSegments((prev) =>
+      prev.map((s) =>
+        s.status === 'active'
+          ? { ...s, endLsn: nextLsn, sizeBytes: s.sizeBytes + walRec.sizeBytes }
+          : s
+      )
+    );
 
     // Record mutation in command log
     setCommandLogs((prev) => [
@@ -217,9 +430,41 @@ export function App() {
 
   const handleDeleteKey = (key: string) => {
     const nextEpoch = epoch + 1;
+    const nextLsn = walState.currentLsn + 1;
+
     setEpoch(nextEpoch);
-    setWalState((prev) => ({ ...prev, currentLsn: prev.currentLsn + 1 }));
+    setWalState((prev) => ({
+      ...prev,
+      currentLsn: nextLsn,
+      groupCommitBatches: prev.groupCommitBatches + 1,
+    }));
     setKeyspace((prev) => prev.filter((k) => k.key !== key));
+
+    // Append to live WAL binary frame stream
+    const walRec: WalRecordView = {
+      lsn: nextLsn,
+      epoch: nextEpoch,
+      op: 'DEL',
+      key,
+      valPreview: 'tombstone: true',
+      sizeBytes: 25 + key.length,
+      crc64Hex:
+        '0x' +
+        Math.floor(Math.random() * 0xffffffffff)
+          .toString(16)
+          .padStart(16, 'C')
+          .toUpperCase(),
+      timestamp: new Date().toLocaleTimeString(),
+    };
+    setWalRecords((prev) => [walRec, ...prev.slice(0, 49)]);
+
+    setWalSegments((prev) =>
+      prev.map((s) =>
+        s.status === 'active'
+          ? { ...s, endLsn: nextLsn, sizeBytes: s.sizeBytes + walRec.sizeBytes }
+          : s
+      )
+    );
 
     setCommandLogs((prev) => [
       ...prev,
@@ -233,6 +478,130 @@ export function App() {
       },
     ]);
   };
+
+  // Change WAL Durability Sync Policy
+  const handleChangeSyncPolicy = (policy: 'Always' | 'GroupCommit' | 'Periodic') => {
+    const avgLatency = policy === 'Always' ? 385 : policy === 'GroupCommit' ? 48 : 4;
+    setWalState((prev) => ({
+      ...prev,
+      syncPolicy: policy,
+      avgFlushLatencyUs: avgLatency,
+    }));
+    setCommandLogs((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(),
+        timestamp: new Date().toLocaleTimeString(),
+        command: `CONFIG SET wal_sync_policy ${policy}`,
+        response: `+OK [Durability policy changed to ${policy}]`,
+        durationUs: 12.4,
+        isError: false,
+      },
+    ]);
+  };
+
+  // Trigger Point-in-Time Checkpoint and WAL pruning
+  const handleTriggerCheckpoint = () => {
+    const nextEpoch = epoch + 1;
+    const nextLsn = walState.currentLsn + 1;
+
+    setEpoch(nextEpoch);
+    setWalState((prev) => ({ ...prev, currentLsn: nextLsn }));
+
+    const checkpointRecord: WalRecordView = {
+      lsn: nextLsn,
+      epoch: nextEpoch,
+      op: 'CHECKPOINT',
+      key: 'system:checkpoint',
+      valPreview: `cutoff_lsn: ${walState.currentLsn}`,
+      sizeBytes: 40,
+      crc64Hex:
+        '0x' +
+        Math.floor(Math.random() * 0xffffffffff)
+          .toString(16)
+          .padStart(16, 'F')
+          .toUpperCase(),
+      timestamp: new Date().toLocaleTimeString(),
+    };
+
+    setWalRecords((prev) => [checkpointRecord, ...prev.slice(0, 49)]);
+
+    const newSnap: SnapshotRecord = {
+      epoch: nextEpoch,
+      timestamp: new Date().toLocaleTimeString(),
+      itemCount: keyspace.length,
+      crc64Hex: checkpointRecord.crc64Hex,
+      sizeBytes: 48 + keyspace.reduce((acc, k) => acc + k.sizeBytes + k.key.length + 17, 0) + 16,
+      status: 'saved',
+    };
+    setLastSnapshot(newSnap);
+
+    setCommandLogs((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(),
+        timestamp: new Date().toLocaleTimeString(),
+        command: 'CHECKPOINT',
+        response: `+OK Checkpoint committed at LSN #${nextLsn}, Epoch #${nextEpoch}`,
+        durationUs: 45.2,
+        isError: false,
+      },
+    ]);
+  };
+
+  // Simulate Crash & Replay Engine
+  const handleSimulateCrashAndReplay = (simulateTornWrite: boolean) => {
+    const truncatedBytes = simulateTornWrite ? 48 : 0;
+    const report: WalRecoveryReportView = {
+      recordsReplayed: walRecords.length,
+      maxLsn: walState.currentLsn,
+      truncatedBytes,
+      corruptedSegments: 0,
+      elapsedMs: 1.18 + Math.random() * 0.4,
+      timestamp: new Date().toLocaleTimeString(),
+    };
+    setLastRecoveryReport(report);
+
+    setCommandLogs((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(),
+        timestamp: new Date().toLocaleTimeString(),
+        command: simulateTornWrite
+          ? 'VALENCE CRASH_REPLAY --torn-tail'
+          : 'VALENCE CRASH_REPLAY',
+        response: `+OK Replayed ${report.recordsReplayed} WAL records up to LSN #${report.maxLsn} (${report.truncatedBytes} torn bytes discarded) in ${report.elapsedMs.toFixed(2)}ms`,
+        durationUs: report.elapsedMs * 1000,
+        isError: false,
+      },
+    ]);
+  };
+
+  // Background Workload Generator Simulator
+  useEffect(() => {
+    if (workloadMode === 'idle') {
+      setOpsPerSec(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      if (workloadMode === 'oltp') {
+        const rate = 1180 + Math.floor(Math.random() * 140);
+        setOpsPerSec(rate);
+        const randomId = Math.floor(Math.random() * 60);
+        const k = `session:user_${randomId}`;
+        const v = `token_${Math.random().toString(36).substring(7)}`;
+        handleSetKey(k, v, 30000);
+      } else if (workloadMode === 'stress') {
+        const rate = 8300 + Math.floor(Math.random() * 700);
+        setOpsPerSec(rate);
+        const batchId = Math.floor(Math.random() * 120);
+        handleSetKey(`stress:node_${batchId}`, `val_${Date.now()}`, 15000);
+      }
+    }, 1200);
+
+    return () => clearInterval(interval);
+  }, [workloadMode, epoch, walState.currentLsn]);
 
   // RESP Terminal Command Dispatcher
   const handleExecuteCommand = (raw: string) => {
@@ -253,8 +622,14 @@ export function App() {
           epoch: snapEpoch,
           timestamp: new Date().toLocaleTimeString(),
           itemCount: keyspace.length,
-          crc64Hex: '0x' + Math.floor(Math.random() * 0xFFFFFFFFFF).toString(16).padStart(16, 'A').toUpperCase(),
-          sizeBytes: 48 + keyspace.reduce((acc, k) => acc + k.sizeBytes + k.key.length + 17, 0) + 16,
+          crc64Hex:
+            '0x' +
+            Math.floor(Math.random() * 0xffffffffff)
+              .toString(16)
+              .padStart(16, 'A')
+              .toUpperCase(),
+          sizeBytes:
+            48 + keyspace.reduce((acc, k) => acc + k.sizeBytes + k.key.length + 17, 0) + 16,
           status: 'saved',
         };
         setLastSnapshot(newSnap);
@@ -268,8 +643,14 @@ export function App() {
           epoch: snapEpoch,
           timestamp: new Date().toLocaleTimeString(),
           itemCount: keyspace.length,
-          crc64Hex: '0x' + Math.floor(Math.random() * 0xFFFFFFFFFF).toString(16).padStart(16, 'E').toUpperCase(),
-          sizeBytes: 48 + keyspace.reduce((acc, k) => acc + k.sizeBytes + k.key.length + 17, 0) + 16,
+          crc64Hex:
+            '0x' +
+            Math.floor(Math.random() * 0xffffffffff)
+              .toString(16)
+              .padStart(16, 'E')
+              .toUpperCase(),
+          sizeBytes:
+            48 + keyspace.reduce((acc, k) => acc + k.sizeBytes + k.key.length + 17, 0) + 16,
           status: 'saved',
         };
         setLastSnapshot(newSnap);
@@ -279,6 +660,12 @@ export function App() {
 
       case 'LASTSAVE': {
         response = `:(integer) ${Math.floor(Date.now() / 1000)}`;
+        break;
+      }
+
+      case 'CHECKPOINT': {
+        handleTriggerCheckpoint();
+        response = `+OK [WAL Checkpoint synchronized, LSN #${walState.currentLsn}]`;
         break;
       }
 
@@ -307,8 +694,13 @@ export function App() {
           response = "-ERR wrong number of arguments for 'get' command";
           isError = true;
         } else {
-          const found = keyspace.find((item) => item.key === parts[1]);
-          response = found ? `"${found.value}"` : '(nil)';
+          const k = parts[1];
+          const found = keyspace.find((item) => item.key === k);
+          if (found) {
+            response = `"${found.value}"`;
+          } else {
+            response = '$-1';
+          }
         }
         break;
       }
@@ -318,9 +710,14 @@ export function App() {
           response = "-ERR wrong number of arguments for 'del' command";
           isError = true;
         } else {
-          const existed = keyspace.some((item) => item.key === parts[1]);
-          if (existed) handleDeleteKey(parts[1]);
-          response = `:(integer) ${existed ? 1 : 0}`;
+          const k = parts[1];
+          const found = keyspace.find((item) => item.key === k);
+          if (found) {
+            handleDeleteKey(k);
+            response = ':(integer) 1';
+          } else {
+            response = ':(integer) 0';
+          }
         }
         break;
       }
@@ -330,35 +727,43 @@ export function App() {
           response = "-ERR wrong number of arguments for 'exists' command";
           isError = true;
         } else {
-          const exists = keyspace.some((item) => item.key === parts[1]);
+          const k = parts[1];
+          const exists = keyspace.some((item) => item.key === k);
           response = `:(integer) ${exists ? 1 : 0}`;
         }
         break;
       }
 
-      case 'KEYS': {
-        const pattern = parts[1] || '*';
-        const matched = keyspace
-          .filter((item) => {
-            if (pattern === '*') return true;
-            const prefix = pattern.replace('*', '');
-            return item.key.startsWith(prefix);
-          })
-          .map((item, idx) => `${idx + 1}) "${item.key}"`);
-        response = `*${matched.length}\n${matched.join('\n')}`;
+      case 'TTL': {
+        if (parts.length < 2) {
+          response = "-ERR wrong number of arguments for 'ttl' command";
+          isError = true;
+        } else {
+          const k = parts[1];
+          const found = keyspace.find((item) => item.key === k);
+          if (!found) {
+            response = ':(integer) -2';
+          } else if (!found.expiresAt) {
+            response = ':(integer) -1';
+          } else {
+            const remSec = Math.max(0, Math.floor((found.expiresAt - Date.now()) / 1000));
+            response = `:(integer) ${remSec}`;
+          }
+        }
         break;
       }
 
       case 'MGET': {
         const keys = parts.slice(1);
         if (keys.length === 0) {
-          response = '*0';
+          response = "-ERR wrong number of arguments for 'mget' command";
+          isError = true;
         } else {
-          const items = keys.map((k, idx) => {
-            const item = keyspace.find((entry) => entry.key === k);
-            return `${idx + 1}) ${item ? `"${item.value}"` : '(nil)'}`;
+          const vals = keys.map((k) => {
+            const item = keyspace.find((i) => i.key === k);
+            return item ? `"${item.value}"` : 'nil';
           });
-          response = `*${keys.length}\n${items.join('\n')}`;
+          response = `*${vals.length}\n${vals.map((v, idx) => ` ${idx + 1}) ${v}`).join('\n')}`;
         }
         break;
       }
@@ -382,7 +787,9 @@ export function App() {
         break;
 
       case 'INFO':
-        response = `# Server\nvalence_version:0.1.0\narch:thread_per_core_shared_nothing\nshards:${shards.length}\nstate:standby_ready\n\n# Persistence\nepoch:${epoch}\nforkless_snapshots:active\nformat:valence_snap_v1\nwal_enabled:1\nwal_current_lsn:${walState.currentLsn}\nwal_sync_policy:${walState.syncPolicy}\nwal_active_segment:${walState.activeSegment}\nchecksum:ecma182_crc64\n\n# Memory\nkeys_total:${keyspace.length}\nsso_inlined_ratio:${Math.round((keyspace.filter((k) => k.isSso).length / Math.max(1, keyspace.length)) * 100)}%\nslot_size_bytes:64\n\n# Expiration\ntiming_wheel_tiers:4\nresolution:1ms`;
+        response = `# Server\nvalence_version:0.1.0\narch:thread_per_core_shared_nothing\nshards:${shards.length}\nstate:standby_ready\n\n# Persistence\nepoch:${epoch}\nforkless_snapshots:active\nformat:valence_snap_v1\nwal_enabled:1\nwal_current_lsn:${walState.currentLsn}\nwal_sync_policy:${walState.syncPolicy}\nwal_active_segment:${walState.activeSegment}\nchecksum:ecma182_crc64\n\n# Memory\nkeys_total:${keyspace.length}\nsso_inlined_ratio:${Math.round(
+          (keyspace.filter((k) => k.isSso).length / Math.max(1, keyspace.length)) * 100
+        )}%\nslot_size_bytes:64\n\n# Expiration\ntiming_wheel_tiers:4\nresolution:1ms`;
         break;
 
       default:
@@ -423,9 +830,25 @@ export function App() {
           {/* Cluster Status Pills */}
           <div className="cluster-stats-strip">
             <div className="stat-pill">
-              <span className="health-dot" />
+              <span
+                className="health-dot"
+                style={{
+                  background:
+                    workloadMode === 'idle' ? 'var(--accent-green)' : 'var(--accent-amber)',
+                  boxShadow:
+                    workloadMode === 'idle' ? 'none' : '0 0 6px var(--accent-amber)',
+                }}
+              />
               <span>ENGINE:</span>
-              <span className="val" style={{ color: 'var(--accent-green)' }}>STANDBY (READY)</span>
+              <span
+                className="val"
+                style={{
+                  color:
+                    workloadMode === 'idle' ? 'var(--accent-green)' : 'var(--accent-amber)',
+                }}
+              >
+                {workloadMode === 'idle' ? 'STANDBY (READY)' : 'ACTIVE WORKLOAD'}
+              </span>
             </div>
 
             <div className="stat-pill">
@@ -436,26 +859,32 @@ export function App() {
 
             <div className="stat-pill">
               <Database size={12} color="var(--text-muted)" />
-              <span>STORED KEYS:</span>
+              <span>KEYS:</span>
               <span className="val">{keyspace.length}</span>
             </div>
 
             <div className="stat-pill">
               <Save size={12} color="var(--accent-cyan)" />
               <span>EPOCH:</span>
-              <span className="val" style={{ color: 'var(--accent-cyan)' }}>#{epoch}</span>
+              <span className="val" style={{ color: 'var(--accent-cyan)' }}>
+                #{epoch}
+              </span>
             </div>
 
             <div className="stat-pill">
               <CheckCircle2 size={12} color="var(--accent-green)" />
               <span>SNAPSHOTS:</span>
-              <span className="val" style={{ color: 'var(--accent-green)' }}>FORKLESS</span>
+              <span className="val" style={{ color: 'var(--accent-green)' }}>
+                FORKLESS
+              </span>
             </div>
 
             <div className="stat-pill">
               <FileText size={12} color="var(--accent-cyan)" />
               <span>WAL LSN:</span>
-              <span className="val" style={{ color: 'var(--accent-cyan)' }}>#{walState.currentLsn}</span>
+              <span className="val" style={{ color: 'var(--accent-cyan)' }}>
+                #{walState.currentLsn}
+              </span>
             </div>
           </div>
 
@@ -486,7 +915,7 @@ export function App() {
         </div>
       </nav>
 
-      {/* Subnav Tabs: 4 Essential Enterprise Database Console Pillars */}
+      {/* Subnav Tabs: 5 Essential Enterprise Database Console Pillars */}
       <div className="tab-nav">
         <button
           className={`tab-btn ${activeTab === 'keyspace' ? 'active' : ''}`}
@@ -500,6 +929,13 @@ export function App() {
           onClick={() => setActiveTab('topology')}
         >
           <Cpu size={14} /> Cluster Topology & Memory
+        </button>
+
+        <button
+          className={`tab-btn ${activeTab === 'durability' ? 'active' : ''}`}
+          onClick={() => setActiveTab('durability')}
+        >
+          <ShieldCheck size={14} /> WAL Durability & Replay
         </button>
 
         <button
@@ -537,11 +973,26 @@ export function App() {
           />
         )}
 
+        {activeTab === 'durability' && (
+          <DurabilityConsole
+            walState={walState}
+            walRecords={walRecords}
+            walSegments={walSegments}
+            lastRecoveryReport={lastRecoveryReport}
+            onChangeSyncPolicy={handleChangeSyncPolicy}
+            onSimulateCrashAndReplay={handleSimulateCrashAndReplay}
+            onTriggerCheckpoint={handleTriggerCheckpoint}
+          />
+        )}
+
         {activeTab === 'profiler' && (
           <ActivityProfiler
             logs={commandLogs}
             keyspace={keyspace}
             onClearLogs={() => setCommandLogs([])}
+            workloadMode={workloadMode}
+            opsPerSec={opsPerSec}
+            onSetWorkloadMode={setWorkloadMode}
           />
         )}
 
