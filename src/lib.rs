@@ -12,6 +12,7 @@
 pub mod protocol;
 pub mod server;
 pub mod sharding;
+pub mod snapshot;
 pub mod storage;
 pub mod timer;
 
@@ -22,6 +23,10 @@ pub use sharding::{
     spsc_channel, AffinityError, CachePadded, Consumer, CoreId, CpuTopology, Producer,
     QueueFull, ShardCoordinator, ShardError, ShardOp, ShardRequest, ShardResponse,
     ShardResult, ShardRouter,
+};
+pub use snapshot::{
+    Epoch, EpochTracker, PreUpdateAction, SnapshotError, SnapshotId, SnapshotMetadata,
+    SnapshotRegistry, SnapshotStatus, EPOCH_INIT, EPOCH_ZERO,
 };
 pub use storage::entry::{CompactKey, CompactValue, Slot, SlotState};
 pub use storage::robin_hood::RobinHoodMap;
