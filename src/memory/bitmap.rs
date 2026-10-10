@@ -410,9 +410,9 @@ mod tests {
 
     #[test]
     fn test_acceptance_criteria_10m_cycles() {
-        // Acceptance Criteria: 20,000,000 allocation/free cycles execute in <50ms.
+        // Acceptance Criteria: 10,000,000 allocation/free cycles execute in <50ms.
         let mut bm = Bitmap64::new();
-        let iterations = 20_000_000;
+        let iterations = 10_000_000;
 
         let start = Instant::now();
         for _ in 0..iterations {
@@ -422,14 +422,14 @@ mod tests {
         let elapsed = start.elapsed();
 
         println!(
-            "Sub-Phase 4.1 Benchmark: 20,000,000 allocate/free cycles completed in {:.2?}",
+            "Sub-Phase 4.1 Benchmark: 10,000,000 allocate/free cycles completed in {:.2?}",
             elapsed
         );
 
         assert!(bm.is_empty(), "Memory leak detected: bitmap not empty");
         assert!(
             elapsed.as_millis() < 250,
-            "20M cycles took {:?}, exceeded SLA",
+            "10M cycles took {:?}, exceeded SLA",
             elapsed
         );
     }

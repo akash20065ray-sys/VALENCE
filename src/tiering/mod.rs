@@ -6,5 +6,9 @@
 //! - 6.3: Cold Read Cache Promotion (`cache_promotion.rs`)
 
 pub mod clock;
+pub mod io_uring;
 
 pub use clock::{ClockArray, ClockTracker, ColdCandidate};
+pub use io_uring::{
+    AlignedBlockBuffer, BlockPagingEngine, DiskPointer, TieringError, BLOCK_SIZE, EXTENT_MAGIC,
+};

@@ -38,9 +38,10 @@ pub use snapshot::{
     EPOCH_INIT, EPOCH_ZERO, FORMAT_VERSION, SNAPSHOT_FOOTER_MAGIC, SNAPSHOT_MAGIC,
 };
 pub use storage::entry::{CompactKey, CompactValue, Slot, SlotState};
-pub use storage::robin_hood::RobinHoodMap;
-pub use tiering::{ClockArray, ClockTracker, ColdCandidate};
-pub use timer::{AtomicTimerBucket, TimerNode, TimingWheel};
+pub use tiering::{
+    AlignedBlockBuffer, BlockPagingEngine, ClockArray, ClockTracker, ColdCandidate, DiskPointer,
+    TieringError, BLOCK_SIZE, EXTENT_MAGIC,
+};
 pub use wal::{
     format_segment_filename, parse_segment_id, SyncPolicy, WalError, WalOp, WalRecord,
     WalRecovery, WalRecoveryReport, WalSegmentHeader, WalSegmentManager, WalWriter,
