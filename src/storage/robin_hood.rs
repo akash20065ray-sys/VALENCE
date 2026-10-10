@@ -7,7 +7,8 @@
 //! - Early Search Termination: lookups stop as soon as `slot.dib < search_dib`.
 //! - Snapshot Epoch awareness for Point-in-Time consistency.
 
-use super::entry::Slot;
+use super::entry::{CompactValue, Slot};
+use crate::memory::slab_arena::SlabArena;
 use twox_hash::XxHash64;
 use std::hash::Hasher;
 
@@ -24,13 +25,14 @@ pub fn hash_key(key: &[u8]) -> u64 {
     hasher.finish()
 }
 
-/// High-Performance Robin Hood Hash Map.
+/// High-Performance Robin Hood Hash Map with Integrated Slab Arena.
 pub struct RobinHoodMap {
     slots: Box<[Slot]>,
     capacity: usize,
     mask: usize,
     count: usize,
     epoch: u64,
+    slab_arena: Option<SlabArena>,
 }
 
 impl RobinHoodMap {
@@ -49,7 +51,44 @@ impl RobinHoodMap {
             mask,
             count: 0,
             epoch: 1,
+            slab_arena: None,
         }
+    }
+
+    /// Constructs a Robin Hood Map with an integrated 2MB hugepage slab arena.
+    pub fn with_slab(initial_capacity: usize) -> Self {
+        let mut map = Self::new(initial_capacity);
+        map.slab_arena = Some(SlabArena::new());
+        map
+    }
+
+    /// Constructs a Robin Hood Map with a slab arena of custom chunk size.
+    pub fn with_slab_chunk(initial_capacity: usize, chunk_size: usize) -> Self {
+        let mut map = Self::new(initial_capacity);
+        map.slab_arena = Some(SlabArena::with_chunk_size(chunk_size));
+        map
+    }
+
+    /// Enables slab arena on an existing map if not already present.
+    pub fn enable_slab(&mut self) {
+        if self.slab_arena.is_none() {
+            self.slab_arena = Some(SlabArena::new());
+        }
+    }
+
+    /// Returns true if this map has an active slab arena.
+    pub fn has_slab(&self) -> bool {
+        self.slab_arena.is_some()
+    }
+
+    /// Returns an immutable reference to the slab arena if enabled.
+    pub fn slab_arena(&self) -> Option<&SlabArena> {
+        self.slab_arena.as_ref()
+    }
+
+    /// Returns a mutable reference to the slab arena if enabled.
+    pub fn slab_arena_mut(&mut self) -> Option<&mut SlabArena> {
+        self.slab_arena.as_mut()
     }
 
     #[inline(always)]
@@ -139,6 +178,25 @@ impl RobinHoodMap {
         self.get(key).is_some()
     }
 
+    /// Helper: Prepares a CompactValue, allocating from SlabArena for values > 23B up to 1024B.
+    fn create_compact_value(&mut self, val_bytes: &[u8]) -> CompactValue {
+        if val_bytes.len() <= 23 {
+            CompactValue::new(val_bytes)
+        } else if let Some(ref mut arena) = self.slab_arena {
+            if val_bytes.len() <= 1024 {
+                if let Some(alloc) = arena.allocate_bytes(val_bytes) {
+                    CompactValue::new_slab(alloc.as_ptr(), val_bytes.len())
+                } else {
+                    CompactValue::new(val_bytes)
+                }
+            } else {
+                CompactValue::new(val_bytes)
+            }
+        } else {
+            CompactValue::new(val_bytes)
+        }
+    }
+
     /// Inserts a key-value pair. If key already exists, updates value and returns old value.
     pub fn insert(&mut self, key: &[u8], value: &[u8]) -> Option<Vec<u8>> {
         // Grow table if load factor threshold exceeded
@@ -154,17 +212,23 @@ impl RobinHoodMap {
         let mut probe_idx = idx;
         let mut probe_dib: u16 = 0;
         while (probe_dib as usize) < self.capacity {
-            let slot = &mut self.slots[probe_idx];
-            if slot.is_empty() {
+            if self.slots[probe_idx].is_empty() {
                 break;
             }
-            if slot.is_occupied() {
-                if slot.dib < probe_dib {
+            if self.slots[probe_idx].is_occupied() {
+                if self.slots[probe_idx].dib < probe_dib {
                     break;
                 }
-                if slot.hash == hash && slot.key() == key {
-                    let old_val = slot.value().to_vec();
-                    slot.set_value(value, self.epoch);
+                if self.slots[probe_idx].hash == hash && self.slots[probe_idx].key() == key {
+                    let old_val = self.slots[probe_idx].value().to_vec();
+                    let old_slab_ptr = self.slots[probe_idx].value.slab_ptr();
+                    if let Some((ptr, len)) = old_slab_ptr {
+                        if let Some(ref mut arena) = self.slab_arena {
+                            let _ = arena.free(ptr, len);
+                        }
+                    }
+                    let new_val = self.create_compact_value(value);
+                    self.slots[probe_idx].set_compact_value(new_val, self.epoch);
                     return Some(old_val);
                 }
             }
@@ -173,7 +237,8 @@ impl RobinHoodMap {
         }
 
         // Inserting new key: prepare incoming slot
-        let mut incoming = Slot::new(hash, self.epoch, 0, key, value);
+        let incoming_val = self.create_compact_value(value);
+        let mut incoming = Slot::new_with_value(hash, self.epoch, 0, key, incoming_val);
 
         loop {
             let slot = &mut self.slots[idx];
@@ -249,6 +314,12 @@ impl RobinHoodMap {
         }
 
         let old_val = self.slots[target_idx].value().to_vec();
+        let old_slab_ptr = self.slots[target_idx].value.slab_ptr();
+        if let Some((ptr, len)) = old_slab_ptr {
+            if let Some(ref mut arena) = self.slab_arena {
+                let _ = arena.free(ptr, len);
+            }
+        }
 
         // Perform O(1) Backshift Deletion
         let mut curr = target_idx;
@@ -277,6 +348,17 @@ impl RobinHoodMap {
         self.remove(key).is_some()
     }
 
+    /// Clears all entries from the map and resets slab memory pools.
+    pub fn clear(&mut self) {
+        if let Some(ref mut arena) = self.slab_arena {
+            arena.reset();
+        }
+        for slot in self.slots.iter_mut() {
+            *slot = Slot::empty();
+        }
+        self.count = 0;
+    }
+
     /// Calculates the maximum Distance from Ideal Bucket across all active slots.
     pub fn max_probe_length(&self) -> usize {
         self.slots
@@ -301,22 +383,70 @@ impl RobinHoodMap {
             .collect()
     }
 
-    /// Doubles the table capacity and re-inserts all active entries.
-    fn grow(&mut self) {
-        let new_capacity = self.capacity * 2;
-        let mut new_map = RobinHoodMap::new(new_capacity);
-        new_map.set_epoch(self.epoch);
-
+    /// Computes memory metrics including the fragmentation ratio (Physical / Logical).
+    pub fn memory_fragmentation_ratio(&self) -> f64 {
+        let mut logical_bytes = 0;
         for slot in self.slots.iter() {
             if slot.is_occupied() {
-                new_map.insert(slot.key(), slot.value());
+                logical_bytes += slot.key().len() + slot.value().len();
             }
         }
 
-        self.slots = new_map.slots;
-        self.capacity = new_map.capacity;
-        self.mask = new_map.mask;
-        self.count = new_map.count;
+        if logical_bytes == 0 {
+            return 1.0;
+        }
+
+        let physical_bytes = if let Some(ref arena) = self.slab_arena {
+            arena.stats().total_allocated_bytes
+        } else {
+            logical_bytes
+        };
+
+        if physical_bytes == 0 {
+            1.0
+        } else {
+            (physical_bytes as f64) / (logical_bytes as f64)
+        }
+    }
+
+    /// Doubles the table capacity and re-inserts all active entries in place without value reallocation.
+    fn grow(&mut self) {
+        let new_capacity = self.capacity * 2;
+        let new_mask = new_capacity - 1;
+        let mut new_slots = Vec::with_capacity(new_capacity);
+        for _ in 0..new_capacity {
+            new_slots.push(Slot::empty());
+        }
+
+        for slot in self.slots.iter_mut() {
+            if slot.is_occupied() {
+                let mut incoming = std::mem::replace(slot, Slot::empty());
+                let hash = incoming.hash;
+                let mut idx = (hash as usize) & new_mask;
+                let mut incoming_dib: u16 = 0;
+
+                loop {
+                    let target = &mut new_slots[idx];
+                    if target.is_empty() {
+                        incoming.dib = incoming_dib;
+                        *target = incoming;
+                        break;
+                    }
+                    if target.dib < incoming_dib {
+                        let displaced_dib = target.dib;
+                        incoming.dib = incoming_dib;
+                        std::mem::swap(target, &mut incoming);
+                        incoming_dib = displaced_dib;
+                    }
+                    idx = (idx + 1) & new_mask;
+                    incoming_dib += 1;
+                }
+            }
+        }
+
+        self.slots = new_slots.into_boxed_slice();
+        self.capacity = new_capacity;
+        self.mask = new_mask;
     }
 }
 
@@ -444,5 +574,78 @@ mod tests {
         // Snapshot at epoch 2 sees k1, k2, k3
         let snap2 = map.iter_snapshot(2);
         assert_eq!(snap2.len(), 3);
+    }
+
+    #[test]
+    fn test_slab_integration_inserts_and_deletions() {
+        let mut map = RobinHoodMap::with_slab_chunk(64, 64 * 1024);
+        assert!(map.has_slab());
+
+        // 1. Inlined small value (<= 23B)
+        map.insert(b"small_key", b"short_val");
+        assert_eq!(map.get(b"small_key"), Some(&b"short_val"[..]));
+        let slot = map.slot_at(map.slots.iter().position(|s| s.key() == b"small_key").unwrap()).unwrap();
+        assert!(slot.value.is_inline());
+
+        // 2. Slab-allocated value (> 23B, fits in 64B class)
+        let med_val = b"this_is_a_medium_payload_that_exceeds_twenty_three_bytes_exactly";
+        map.insert(b"med_key", med_val);
+        assert_eq!(map.get(b"med_key"), Some(&med_val[..]));
+        let slot_med = map.slot_at(map.slots.iter().position(|s| s.key() == b"med_key").unwrap()).unwrap();
+        assert!(slot_med.value.is_slab());
+
+        // 3. Update slab key with new value
+        let med_val_2 = b"another_medium_payload_updating_in_place_inside_slab_arena_now";
+        let old = map.insert(b"med_key", med_val_2);
+        assert_eq!(old, Some(med_val.to_vec()));
+        assert_eq!(map.get(b"med_key"), Some(&med_val_2[..]));
+
+        // 4. Delete slab key (verifies O(1) slab free)
+        assert!(map.delete(b"med_key"));
+        assert_eq!(map.get(b"med_key"), None);
+
+        // 5. High volume inserts across size classes
+        for i in 0..500 {
+            let k = format!("k:{}", i);
+            let v = format!("payload_with_sufficient_length_to_trigger_slab_allocation_{:040}", i);
+            map.insert(k.as_bytes(), v.as_bytes());
+        }
+
+        for i in 0..500 {
+            let k = format!("k:{}", i);
+            let expected_v = format!("payload_with_sufficient_length_to_trigger_slab_allocation_{:040}", i);
+            assert_eq!(map.get(k.as_bytes()), Some(expected_v.as_bytes()));
+        }
+
+        // Verify fragmentation ratio is tightly bounded
+        let ratio = map.memory_fragmentation_ratio();
+        assert!(ratio >= 1.0 && ratio < 1.35, "Fragmentation ratio: {}", ratio);
+
+        // Clear map and verify reset
+        map.clear();
+        assert_eq!(map.len(), 0);
+        assert_eq!(map.memory_fragmentation_ratio(), 1.0);
+    }
+
+    #[test]
+    fn test_slab_integration_fragmentation_acceptance() {
+        let mut map = RobinHoodMap::with_slab_chunk(256, 128 * 1024);
+
+        // Churn workload: insert and delete 5,000 keys with slab allocations
+        for i in 0..5_000 {
+            let k = format!("user:session:token:{}", i);
+            let v = format!("bearer_token_payload_with_jwt_signature_long_data_{:050}", i);
+            map.insert(k.as_bytes(), v.as_bytes());
+            if i % 4 == 0 {
+                map.delete(k.as_bytes());
+            }
+        }
+
+        let ratio = map.memory_fragmentation_ratio();
+        assert!(
+            ratio < 1.15,
+            "Fragmentation ratio must stay strictly bounded under high churn (got {:.3})",
+            ratio
+        );
     }
 }

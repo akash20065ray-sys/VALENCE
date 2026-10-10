@@ -170,7 +170,49 @@ impl CompactValue {
 
     #[inline(always)]
     pub fn is_inline(&self) -> bool {
-        self.len != 0xFF
+        (self.len as usize) <= INLINE_VAL_CAPACITY
+    }
+
+    #[inline(always)]
+    pub fn is_slab(&self) -> bool {
+        self.len == 0xFE
+    }
+
+    #[inline(always)]
+    pub fn is_heap(&self) -> bool {
+        self.len == 0xFF
+    }
+
+    /// Constructs a CompactValue referencing a slab arena allocation.
+    pub fn new_slab(ptr: *const u8, len: usize) -> Self {
+        let ptr_val = (ptr as usize).to_ne_bytes();
+        let len_val = len.to_ne_bytes();
+
+        let mut data = [0u8; INLINE_VAL_CAPACITY];
+        data[0..8].copy_from_slice(&ptr_val);
+        data[8..16].copy_from_slice(&len_val);
+
+        Self {
+            len: 0xFE, // Marker indicating Slab Arena pointer
+            data,
+        }
+    }
+
+    /// Extracts the slab pointer and length if this value is slab-allocated.
+    pub fn slab_ptr(&self) -> Option<(*const u8, usize)> {
+        if self.len == 0xFE {
+            let mut ptr_bytes = [0u8; 8];
+            ptr_bytes.copy_from_slice(&self.data[0..8]);
+            let ptr = usize::from_ne_bytes(ptr_bytes) as *const u8;
+
+            let mut len_bytes = [0u8; 8];
+            len_bytes.copy_from_slice(&self.data[8..16]);
+            let len = usize::from_ne_bytes(len_bytes);
+
+            Some((ptr, len))
+        } else {
+            None
+        }
     }
 
     #[inline(always)]
@@ -207,7 +249,8 @@ impl Clone for CompactValue {
 
 impl Drop for CompactValue {
     fn drop(&mut self) {
-        if !self.is_inline() {
+        // Only free heap allocations. Slab arena allocations are managed by SlabArena.
+        if self.len == 0xFF {
             let mut ptr_bytes = [0u8; 8];
             ptr_bytes.copy_from_slice(&self.data[0..8]);
             let ptr = usize::from_ne_bytes(ptr_bytes) as *mut u8;
@@ -333,9 +376,37 @@ impl Slot {
         self.value.as_slice()
     }
 
+    /// Constructs an occupied slot with an explicitly prepared CompactValue.
+    pub fn new_with_value(hash: u64, epoch: u64, dib: u16, key_bytes: &[u8], value: CompactValue) -> Self {
+        let key = CompactKey::new(key_bytes);
+        let mut flags = 0u8;
+        if key.is_inline() {
+            flags |= FLAG_KEY_INLINE;
+        }
+        if value.is_inline() {
+            flags |= FLAG_VAL_INLINE;
+        }
+
+        Self {
+            hash,
+            epoch,
+            dib,
+            state: SlotState::Occupied,
+            flags,
+            _pad: [0; 4],
+            key,
+            value,
+        }
+    }
+
     /// Updates the value and records the mutation epoch.
     pub fn set_value(&mut self, new_val_bytes: &[u8], new_epoch: u64) {
-        self.value = CompactValue::new(new_val_bytes);
+        self.set_compact_value(CompactValue::new(new_val_bytes), new_epoch);
+    }
+
+    /// Updates the slot with an explicitly created CompactValue.
+    pub fn set_compact_value(&mut self, value: CompactValue, new_epoch: u64) {
+        self.value = value;
         self.epoch = new_epoch;
         if self.value.is_inline() {
             self.flags |= FLAG_VAL_INLINE;
