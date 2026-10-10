@@ -15,6 +15,7 @@ pub mod server;
 pub mod sharding;
 pub mod snapshot;
 pub mod storage;
+pub mod tiering;
 pub mod timer;
 pub mod wal;
 
@@ -38,6 +39,7 @@ pub use snapshot::{
 };
 pub use storage::entry::{CompactKey, CompactValue, Slot, SlotState};
 pub use storage::robin_hood::RobinHoodMap;
+pub use tiering::{ClockArray, ClockTracker, ColdCandidate};
 pub use timer::{AtomicTimerBucket, TimerNode, TimingWheel};
 pub use wal::{
     format_segment_filename, parse_segment_id, SyncPolicy, WalError, WalOp, WalRecord,
