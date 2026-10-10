@@ -5,6 +5,7 @@
 
 pub mod epoch;
 pub mod iterator;
+pub mod persistence;
 
 pub use epoch::{
     Epoch, EpochTracker, PreUpdateAction, SnapshotError, SnapshotId, SnapshotMetadata,
@@ -12,4 +13,8 @@ pub use epoch::{
 };
 pub use iterator::{
     ShadowBuffer, SnapshotItem, SnapshotScanner, SnapshotStreamStats,
+};
+pub use persistence::{
+    Crc64, PersistenceError, SnapshotFileMeta, SnapshotHeader, SnapshotReader, SnapshotWriter,
+    FORMAT_VERSION, SNAPSHOT_FOOTER_MAGIC, SNAPSHOT_MAGIC,
 };

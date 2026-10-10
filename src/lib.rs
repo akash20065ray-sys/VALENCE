@@ -25,9 +25,10 @@ pub use sharding::{
     ShardResult, ShardRouter,
 };
 pub use snapshot::{
-    Epoch, EpochTracker, PreUpdateAction, ShadowBuffer, SnapshotError, SnapshotId,
-    SnapshotItem, SnapshotMetadata, SnapshotRegistry, SnapshotScanner, SnapshotStatus,
-    SnapshotStreamStats, EPOCH_INIT, EPOCH_ZERO,
+    Crc64, Epoch, EpochTracker, PersistenceError, PreUpdateAction, ShadowBuffer, SnapshotError,
+    SnapshotFileMeta, SnapshotHeader, SnapshotId, SnapshotItem, SnapshotMetadata, SnapshotReader,
+    SnapshotRegistry, SnapshotScanner, SnapshotStatus, SnapshotStreamStats, SnapshotWriter,
+    EPOCH_INIT, EPOCH_ZERO, FORMAT_VERSION, SNAPSHOT_FOOTER_MAGIC, SNAPSHOT_MAGIC,
 };
 pub use storage::entry::{CompactKey, CompactValue, Slot, SlotState};
 pub use storage::robin_hood::RobinHoodMap;
