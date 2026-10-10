@@ -44,8 +44,15 @@ echo === Test 3: GET with Execution Plan Trace (--explain) ===
 target\release\valence-cli.exe get "user:session:100" --explain
 
 echo.
+echo.
 echo ==============================================================================
-echo [4/4] Launching Interactive Valence Diagnostic REPL...
+echo [4/5] Launching Valence Studio Web Management Console...
+echo ==============================================================================
+start "Valence Studio Dashboard" cmd /c "cd studio && npm run dev"
+
+echo.
+echo ==============================================================================
+echo [5/5] Launching Interactive Valence Diagnostic REPL...
 echo (Type 'help' for command syntax, append '--explain' to trace, 'quit' to exit)
 echo ==============================================================================
 echo.

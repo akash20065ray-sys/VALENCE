@@ -41,7 +41,15 @@ echo "=== Test 3: GET with Execution Plan Trace (--explain) ==="
 
 echo ""
 echo "=============================================================================="
-echo "[4/4] Launching Interactive Valence Diagnostic REPL..."
+echo "[4/5] Launching Valence Studio Web Management Console..."
+echo "=============================================================================="
+(cd studio && npm run dev) &
+STUDIO_PID=$!
+trap "kill $SERVER_PID $STUDIO_PID 2>/dev/null || true" EXIT
+
+echo ""
+echo "=============================================================================="
+echo "[5/5] Launching Interactive Valence Diagnostic REPL..."
 echo "(Type 'help' for command syntax, append '--explain' to trace, 'quit' to exit)"
 echo "=============================================================================="
 echo ""
