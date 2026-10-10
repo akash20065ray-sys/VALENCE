@@ -18,6 +18,10 @@ path = "src/bin/valence_server.rs"
 name = "valence-cli"
 path = "src/bin/valence_cli.rs"
 
+[[bench]]
+name = "suite"
+harness = false
+
 [dependencies]
 # Concurrency & Lock-Free Primitives
 crossbeam = "0.8"
