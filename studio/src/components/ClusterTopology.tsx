@@ -7,17 +7,23 @@ import {
   Activity,
   HardDrive,
   CheckCircle2,
+  Save,
+  Check,
 } from 'lucide-react';
-import type { ShardData, KeyspaceItem } from '../types';
+import type { ShardData, KeyspaceItem, SnapshotRecord } from '../types';
 
 interface ClusterTopologyProps {
   shards: ShardData[];
   keyspace: KeyspaceItem[];
+  epoch: number;
+  lastSnapshot: SnapshotRecord | null;
 }
 
 export const ClusterTopology: React.FC<ClusterTopologyProps> = ({
   shards,
   keyspace,
+  epoch,
+  lastSnapshot,
 }) => {
   const totalKeys = keyspace.length;
   const ssoKeys = keyspace.filter((k) => k.isSso).length;
@@ -29,7 +35,7 @@ export const ClusterTopology: React.FC<ClusterTopologyProps> = ({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: '14px',
         }}
       >
@@ -76,13 +82,75 @@ export const ClusterTopology: React.FC<ClusterTopologyProps> = ({
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '11.5px' }}>
             <HardDrive size={14} color="var(--accent-amber)" />
-            <span>KEYSPACE DISTRIBUTION</span>
+            <span>FORKLESS SNAPSHOTS</span>
           </div>
           <div style={{ fontSize: '20px', fontWeight: 700, marginTop: '6px', color: 'var(--text-primary)' }}>
-            Uniform Jump Hash
+            Epoch #{epoch}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Minimal shard migration on scale
+          <div style={{ fontSize: '11px', color: 'var(--accent-green)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Check size={12} />
+            <span>CRC64 Validated &bull; Zero-Fork CoW</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Snapshot & Persistence Architecture Card */}
+      <div className="card" style={{ background: 'var(--bg-surface)' }}>
+        <div className="card-header">
+          <div className="card-title">
+            <Save size={15} color="var(--accent-primary)" />
+            <span>Point-in-Time Persistence & Crash Recovery (Valence .val v1)</span>
+          </div>
+          <span style={{ fontSize: '11.5px', color: 'var(--accent-green)', fontFamily: 'JetBrains Mono, monospace', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <CheckCircle2 size={13} /> Fork-Free Streaming
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '12px',
+          }}
+        >
+          <div style={{ background: 'var(--bg-elevated)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>CURRENT MUTATION EPOCH</div>
+            <div style={{ fontSize: '15px', fontWeight: 700, marginTop: '2px', color: 'var(--accent-primary)', fontFamily: 'JetBrains Mono, monospace' }}>
+              Epoch #{epoch}
+            </div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+              Monotonic AtomicU64 mutation tracker
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-elevated)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>COPY-ON-WRITE MEMORY OVERHEAD</div>
+            <div style={{ fontSize: '15px', fontWeight: 700, marginTop: '2px', color: 'var(--accent-green)', fontFamily: 'JetBrains Mono, monospace' }}>
+              0B (Key-Level Shadow Buffer)
+            </div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+              Bypasses Linux 4KB page duplication & OOM
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-elevated)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>DATA INTEGRITY CHECKSUM</div>
+            <div style={{ fontSize: '15px', fontWeight: 700, marginTop: '2px', color: 'var(--accent-cyan)', fontFamily: 'JetBrains Mono, monospace' }}>
+              ECMA-182 CRC64 (Verified)
+            </div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+              Multi-GB/s precomputed table validation
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-elevated)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>LATEST SNAPSHOT ON DISK</div>
+            <div style={{ fontSize: '13px', fontWeight: 600, marginTop: '2px', color: 'var(--text-primary)', fontFamily: 'JetBrains Mono, monospace' }}>
+              {lastSnapshot ? `Epoch #${lastSnapshot.epoch} (${lastSnapshot.itemCount} keys)` : 'None (Use BGSAVE / SAVE)'}
+            </div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+              {lastSnapshot ? `CRC: ${lastSnapshot.crc64Hex} @ ${lastSnapshot.timestamp}` : 'Ready for on-demand persistence'}
+            </div>
           </div>
         </div>
       </div>
@@ -243,9 +311,9 @@ export const ClusterTopology: React.FC<ClusterTopologyProps> = ({
             </p>
           </div>
           <div>
-            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>3. SSO 23-Byte Inlined Keys:</span>
+            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>3. Forkless Epoch-Versioned Snapshots:</span>
             <p style={{ marginTop: '4px' }}>
-              Keys up to 15B and values up to 23B are packed directly within Robin Hood slots. Bypasses standard malloc overhead entirely.
+              Replaces Redis's Linux fork() with key-level Copy-on-Write and monotonic mutation epochs. Zero virtual memory page duplication, eliminating OOM killer crashes.
             </p>
           </div>
         </div>

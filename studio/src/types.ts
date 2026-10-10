@@ -36,3 +36,12 @@ export interface CommandLog {
   isError: boolean;
   shardId?: number;
 }
+
+export interface SnapshotRecord {
+  epoch: number;
+  timestamp: string;
+  itemCount: number;
+  crc64Hex: string;
+  sizeBytes: number;
+  status: 'saved' | 'in_progress';
+}

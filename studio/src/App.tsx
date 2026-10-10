@@ -8,12 +8,14 @@ import {
   Moon,
   Sun,
   Layers,
+  Save,
+  CheckCircle2,
 } from 'lucide-react';
 import { KeyspaceBrowser } from './components/KeyspaceBrowser';
 import { ClusterTopology } from './components/ClusterTopology';
 import { ActivityProfiler } from './components/ActivityProfiler';
 import { RespWorkbench } from './components/RespWorkbench';
-import type { ShardData, KeyspaceItem, CommandLog, ThemeMode } from './types';
+import type { ShardData, KeyspaceItem, CommandLog, ThemeMode, SnapshotRecord } from './types';
 import { routeKey } from './utils/router';
 
 export function App() {
@@ -29,6 +31,19 @@ export function App() {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('valence_theme', theme);
   }, [theme]);
+
+  // Monotonic Mutation Epoch (Phase 4 Forkless Persistence)
+  const [epoch, setEpoch] = useState<number>(1);
+
+  // Latest Snapshot Status
+  const [lastSnapshot, setLastSnapshot] = useState<SnapshotRecord | null>({
+    epoch: 1,
+    timestamp: new Date().toLocaleTimeString(),
+    itemCount: 6,
+    crc64Hex: '0x9E4B8F21A7C3D015',
+    sizeBytes: 254,
+    status: 'saved',
+  });
 
   // General-Purpose In-Memory State across diverse application domains
   const [keyspace, setKeyspace] = useState<KeyspaceItem[]>([
@@ -75,7 +90,7 @@ export function App() {
       sizeBytes: 9,
       isSso: true,
       dib: 2,
-      epoch: 2,
+      epoch: 1,
       ttlMs: 15000,
       expiresAt: Date.now() + 15000,
       targetShard: routeKey('lock:distributed:leader_node', 4),
@@ -152,10 +167,12 @@ export function App() {
     };
   });
 
-  // Key Mutation Handlers
+  // Key Mutation Handlers (Advances Monotonic Epoch)
   const handleSetKey = (key: string, value: string, ttlMs: number | null) => {
     const isSso = key.length <= 15 && value.length <= 23;
     const targetShard = routeKey(key, shards.length);
+    const nextEpoch = epoch + 1;
+    setEpoch(nextEpoch);
 
     const newItem: KeyspaceItem = {
       key,
@@ -164,7 +181,7 @@ export function App() {
       sizeBytes: value.length,
       isSso,
       dib: Math.floor(Math.random() * 3),
-      epoch: 1,
+      epoch: nextEpoch,
       ttlMs,
       expiresAt: ttlMs ? Date.now() + ttlMs : null,
       targetShard,
@@ -187,6 +204,8 @@ export function App() {
   };
 
   const handleDeleteKey = (key: string) => {
+    const nextEpoch = epoch + 1;
+    setEpoch(nextEpoch);
     setKeyspace((prev) => prev.filter((k) => k.key !== key));
 
     setCommandLogs((prev) => [
@@ -214,6 +233,41 @@ export function App() {
       case 'PING':
         response = '+PONG';
         break;
+
+      case 'BGSAVE': {
+        const snapEpoch = epoch;
+        const newSnap: SnapshotRecord = {
+          epoch: snapEpoch,
+          timestamp: new Date().toLocaleTimeString(),
+          itemCount: keyspace.length,
+          crc64Hex: '0x' + Math.floor(Math.random() * 0xFFFFFFFFFF).toString(16).padStart(16, 'A').toUpperCase(),
+          sizeBytes: 48 + keyspace.reduce((acc, k) => acc + k.sizeBytes + k.key.length + 17, 0) + 16,
+          status: 'saved',
+        };
+        setLastSnapshot(newSnap);
+        response = `+Background saving started at Epoch #${snapEpoch} (Zero-Fork streaming with Key-Level CoW)`;
+        break;
+      }
+
+      case 'SAVE': {
+        const snapEpoch = epoch;
+        const newSnap: SnapshotRecord = {
+          epoch: snapEpoch,
+          timestamp: new Date().toLocaleTimeString(),
+          itemCount: keyspace.length,
+          crc64Hex: '0x' + Math.floor(Math.random() * 0xFFFFFFFFFF).toString(16).padStart(16, 'E').toUpperCase(),
+          sizeBytes: 48 + keyspace.reduce((acc, k) => acc + k.sizeBytes + k.key.length + 17, 0) + 16,
+          status: 'saved',
+        };
+        setLastSnapshot(newSnap);
+        response = `+OK [Snapshot saved to disk: ${keyspace.length} keys, CRC64 verified]`;
+        break;
+      }
+
+      case 'LASTSAVE': {
+        response = `:(integer) ${Math.floor(Date.now() / 1000)}`;
+        break;
+      }
 
       case 'SET': {
         if (parts.length < 3) {
@@ -315,7 +369,7 @@ export function App() {
         break;
 
       case 'INFO':
-        response = `# Server\nvalence_version:0.1.0\narch:thread_per_core_shared_nothing\nshards:${shards.length}\nstate:standby_ready\n\n# Memory\nkeys_total:${keyspace.length}\nsso_inlined_ratio:${Math.round((keyspace.filter((k) => k.isSso).length / Math.max(1, keyspace.length)) * 100)}%\nslot_size_bytes:64\n\n# Expiration\ntiming_wheel_tiers:4\nresolution:1ms`;
+        response = `# Server\nvalence_version:0.1.0\narch:thread_per_core_shared_nothing\nshards:${shards.length}\nstate:standby_ready\n\n# Persistence\nepoch:${epoch}\nforkless_snapshots:active\nformat:valence_snap_v1\nchecksum:ecma182_crc64\n\n# Memory\nkeys_total:${keyspace.length}\nsso_inlined_ratio:${Math.round((keyspace.filter((k) => k.isSso).length / Math.max(1, keyspace.length)) * 100)}%\nslot_size_bytes:64\n\n# Expiration\ntiming_wheel_tiers:4\nresolution:1ms`;
         break;
 
       default:
@@ -371,6 +425,18 @@ export function App() {
               <Database size={12} color="var(--text-muted)" />
               <span>STORED KEYS:</span>
               <span className="val">{keyspace.length}</span>
+            </div>
+
+            <div className="stat-pill">
+              <Save size={12} color="var(--accent-cyan)" />
+              <span>EPOCH:</span>
+              <span className="val" style={{ color: 'var(--accent-cyan)' }}>#{epoch}</span>
+            </div>
+
+            <div className="stat-pill">
+              <CheckCircle2 size={12} color="var(--accent-green)" />
+              <span>SNAPSHOTS:</span>
+              <span className="val" style={{ color: 'var(--accent-green)' }}>FORKLESS</span>
             </div>
           </div>
 
@@ -446,6 +512,8 @@ export function App() {
           <ClusterTopology
             shards={shards}
             keyspace={keyspace}
+            epoch={epoch}
+            lastSnapshot={lastSnapshot}
           />
         )}
 

@@ -101,10 +101,13 @@ export const RespWorkbench: React.FC<RespWorkbenchProps> = ({
           'PING',
           'INFO',
           'DBSIZE',
+          'BGSAVE',
+          'LASTSAVE',
           'GET auth:jwt:session_991',
           'SET cache:demo "zero_copy" EX 60',
           'MGET ratelimit:api:10.0.1.5 lock:distributed:leader_node',
           'EXISTS lock:distributed:leader_node',
+          'SAVE',
         ].map((cmd) => (
           <button
             key={cmd}
