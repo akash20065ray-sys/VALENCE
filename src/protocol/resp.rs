@@ -18,6 +18,17 @@ pub enum Command<'a> {
     Exists { key: &'a [u8] },
     Expire { key: &'a [u8], seconds: u64 },
     Ttl { key: &'a [u8] },
+    Incr { key: &'a [u8] },
+    Decr { key: &'a [u8] },
+    IncrBy { key: &'a [u8], delta: i64 },
+    DecrBy { key: &'a [u8], delta: i64 },
+    Select { index: u32 },
+    Client {
+        subcommand: &'a [u8],
+        args: Vec<&'a [u8]>,
+    },
+    FlushDb,
+    Keys { pattern: &'a [u8] },
     MGet { keys: Vec<&'a [u8]> },
     MSet { pairs: Vec<(&'a [u8], &'a [u8])> },
     DbSize,
@@ -233,6 +244,50 @@ impl RespParser {
                 i += 2;
             }
             Ok(Command::MSet { pairs })
+        } else if eq_ignore_ascii_case(cmd_name, b"INCR") {
+            if args.len() < 2 {
+                return Err(ParseError::InvalidFrame("INCR requires key"));
+            }
+            Ok(Command::Incr { key: args[1] })
+        } else if eq_ignore_ascii_case(cmd_name, b"DECR") {
+            if args.len() < 2 {
+                return Err(ParseError::InvalidFrame("DECR requires key"));
+            }
+            Ok(Command::Decr { key: args[1] })
+        } else if eq_ignore_ascii_case(cmd_name, b"INCRBY") {
+            if args.len() < 3 {
+                return Err(ParseError::InvalidFrame("INCRBY requires key and delta"));
+            }
+            let delta_str = std::str::from_utf8(args[2]).map_err(|_| ParseError::BadInteger)?;
+            let delta: i64 = delta_str.parse().map_err(|_| ParseError::BadInteger)?;
+            Ok(Command::IncrBy { key: args[1], delta })
+        } else if eq_ignore_ascii_case(cmd_name, b"DECRBY") {
+            if args.len() < 3 {
+                return Err(ParseError::InvalidFrame("DECRBY requires key and delta"));
+            }
+            let delta_str = std::str::from_utf8(args[2]).map_err(|_| ParseError::BadInteger)?;
+            let delta: i64 = delta_str.parse().map_err(|_| ParseError::BadInteger)?;
+            Ok(Command::DecrBy { key: args[1], delta })
+        } else if eq_ignore_ascii_case(cmd_name, b"SELECT") {
+            if args.len() < 2 {
+                return Err(ParseError::InvalidFrame("SELECT requires db index"));
+            }
+            let idx_str = std::str::from_utf8(args[1]).map_err(|_| ParseError::BadInteger)?;
+            let index: u32 = idx_str.parse().map_err(|_| ParseError::BadInteger)?;
+            Ok(Command::Select { index })
+        } else if eq_ignore_ascii_case(cmd_name, b"CLIENT") {
+            if args.len() < 2 {
+                return Err(ParseError::InvalidFrame("CLIENT requires subcommand"));
+            }
+            Ok(Command::Client {
+                subcommand: args[1],
+                args: args[2..].to_vec(),
+            })
+        } else if eq_ignore_ascii_case(cmd_name, b"FLUSHDB") || eq_ignore_ascii_case(cmd_name, b"FLUSHALL") {
+            Ok(Command::FlushDb)
+        } else if eq_ignore_ascii_case(cmd_name, b"KEYS") {
+            let pattern = if args.len() > 1 { args[1] } else { b"*" };
+            Ok(Command::Keys { pattern })
         } else if eq_ignore_ascii_case(cmd_name, b"DBSIZE") {
             Ok(Command::DbSize)
         } else if eq_ignore_ascii_case(cmd_name, b"SAVE") {
@@ -346,6 +401,49 @@ impl RespEncoder {
         }
         out
     }
+
+    pub fn bulk_string_array(items: &[&[u8]]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(16 + items.len() * 32);
+        out.extend_from_slice(&Self::array_header(items.len()));
+        for item in items {
+            out.extend_from_slice(&Self::bulk_string(item));
+        }
+        out
+    }
+}
+
+/// Fast glob pattern matcher supporting '*' and '?' wildcards without dynamic allocations.
+pub fn match_pattern(pattern: &[u8], text: &[u8]) -> bool {
+    if pattern == b"*" {
+        return true;
+    }
+    let mut p = 0;
+    let mut t = 0;
+    let mut star_p = None;
+    let mut match_t = 0;
+
+    while t < text.len() {
+        if p < pattern.len() && (pattern[p] == b'?' || pattern[p] == text[t]) {
+            p += 1;
+            t += 1;
+        } else if p < pattern.len() && pattern[p] == b'*' {
+            star_p = Some(p);
+            p += 1;
+            match_t = t;
+        } else if let Some(sp) = star_p {
+            p = sp + 1;
+            match_t += 1;
+            t = match_t;
+        } else {
+            return false;
+        }
+    }
+
+    while p < pattern.len() && pattern[p] == b'*' {
+        p += 1;
+    }
+
+    p == pattern.len()
 }
 
 #[cfg(test)]
@@ -423,5 +521,72 @@ mod tests {
             RespEncoder::error("unknown command"),
             b"-ERR unknown command\r\n"
         );
+        let arr = RespEncoder::bulk_string_array(&[b"a", b"b"]);
+        assert_eq!(arr, b"*2\r\n$1\r\na\r\n$1\r\nb\r\n");
+    }
+
+    #[test]
+    fn test_parse_incr_and_decr() {
+        let incr = b"*2\r\n$4\r\nINCR\r\n$7\r\ncounter\r\n";
+        let res = RespParser::parse(incr).unwrap().unwrap();
+        assert_eq!(res.0, Command::Incr { key: b"counter" });
+
+        let decr = b"*2\r\n$4\r\nDECR\r\n$7\r\ncounter\r\n";
+        let res2 = RespParser::parse(decr).unwrap().unwrap();
+        assert_eq!(res2.0, Command::Decr { key: b"counter" });
+
+        let incrby = b"*3\r\n$6\r\nINCRBY\r\n$7\r\ncounter\r\n$2\r\n10\r\n";
+        let res3 = RespParser::parse(incrby).unwrap().unwrap();
+        assert_eq!(
+            res3.0,
+            Command::IncrBy {
+                key: b"counter",
+                delta: 10
+            }
+        );
+
+        let decrby = b"*3\r\n$6\r\nDECRBY\r\n$7\r\ncounter\r\n$2\r\n-5\r\n";
+        let res4 = RespParser::parse(decrby).unwrap().unwrap();
+        assert_eq!(
+            res4.0,
+            Command::DecrBy {
+                key: b"counter",
+                delta: -5
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_client_and_select_and_flushdb() {
+        let select = b"*2\r\n$6\r\nSELECT\r\n$1\r\n0\r\n";
+        let res = RespParser::parse(select).unwrap().unwrap();
+        assert_eq!(res.0, Command::Select { index: 0 });
+
+        let client = b"*3\r\n$6\r\nCLIENT\r\n$7\r\nSETNAME\r\n$5\r\nmyapp\r\n";
+        let res2 = RespParser::parse(client).unwrap().unwrap();
+        assert_eq!(
+            res2.0,
+            Command::Client {
+                subcommand: b"SETNAME",
+                args: vec![b"myapp"],
+            }
+        );
+
+        let flushdb = b"*1\r\n$7\r\nFLUSHDB\r\n";
+        let res3 = RespParser::parse(flushdb).unwrap().unwrap();
+        assert_eq!(res3.0, Command::FlushDb);
+
+        let keys = b"*2\r\n$4\r\nKEYS\r\n$1\r\n*\r\n";
+        let res4 = RespParser::parse(keys).unwrap().unwrap();
+        assert_eq!(res4.0, Command::Keys { pattern: b"*" });
+    }
+
+    #[test]
+    fn test_pattern_matching() {
+        assert!(match_pattern(b"*", b"user:1001"));
+        assert!(match_pattern(b"user:*", b"user:1001"));
+        assert!(!match_pattern(b"session:*", b"user:1001"));
+        assert!(match_pattern(b"*1001", b"user:1001"));
+        assert!(match_pattern(b"user:?001", b"user:1001"));
     }
 }

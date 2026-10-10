@@ -316,3 +316,79 @@ fn test_sharded_server_pipelined_and_multi_client() {
     let _ = server_handle.join();
     let _ = fs::remove_dir_all(&test_dir);
 }
+
+#[test]
+fn test_sharded_universal_compatibility_commands() {
+    let test_dir = std::env::temp_dir().join(format!("valence_test_univ_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    let _ = fs::create_dir_all(&test_dir);
+
+    let mut engine = ShardedServerEngine::bind_with_data_dir("127.0.0.1:0", 2, &test_dir).expect("Failed to bind ephemeral port");
+    let addr = engine.local_addr();
+
+    let running = Arc::new(AtomicBool::new(true));
+    let running_clone = running.clone();
+
+    let server_handle = thread::spawn(move || {
+        while running_clone.load(Ordering::Relaxed) {
+            let events = engine.tick();
+            if events == 0 {
+                thread::sleep(Duration::from_micros(50));
+            }
+        }
+    });
+
+    let mut stream = TcpStream::connect(addr).unwrap();
+    stream.set_nodelay(true).unwrap();
+    stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+
+    let mut buf = [0u8; 1024];
+
+    // 1. SELECT 0 -> +OK\r\n
+    stream.write_all(b"*2\r\n$6\r\nSELECT\r\n$1\r\n0\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b"+OK\r\n");
+
+    // 2. CLIENT SETNAME ioredis_app -> +OK\r\n
+    stream.write_all(b"*3\r\n$6\r\nCLIENT\r\n$7\r\nSETNAME\r\n$11\r\nioredis_app\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b"+OK\r\n");
+
+    // 3. INCR hits -> :1\r\n
+    stream.write_all(b"*2\r\n$4\r\nINCR\r\n$4\r\nhits\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b":1\r\n");
+
+    // 4. INCRBY hits 100 -> :101\r\n
+    stream.write_all(b"*3\r\n$6\r\nINCRBY\r\n$4\r\nhits\r\n$3\r\n100\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b":101\r\n");
+
+    // 5. DECR hits -> :100\r\n
+    stream.write_all(b"*2\r\n$4\r\nDECR\r\n$4\r\nhits\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b":100\r\n");
+
+    // 6. DECRBY hits 50 -> :50\r\n
+    stream.write_all(b"*3\r\n$6\r\nDECRBY\r\n$4\r\nhits\r\n$2\r\n50\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b":50\r\n");
+
+    // 7. KEYS * -> contains hits
+    stream.write_all(b"*2\r\n$4\r\nKEYS\r\n$1\r\n*\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b"*1\r\n$4\r\nhits\r\n");
+
+    // 8. FLUSHDB -> +OK\r\n
+    stream.write_all(b"*1\r\n$7\r\nFLUSHDB\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b"+OK\r\n");
+
+    // 9. DBSIZE after FLUSHDB -> :0\r\n
+    stream.write_all(b"*1\r\n$6\r\nDBSIZE\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b":0\r\n");
+
+    running.store(false, Ordering::Relaxed);
+    let _ = server_handle.join();
+    let _ = fs::remove_dir_all(&test_dir);
+}

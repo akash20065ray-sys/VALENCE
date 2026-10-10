@@ -171,3 +171,85 @@ fn test_tcp_expiration_via_timing_wheel() {
     let _ = server_handle.join();
 }
 
+#[test]
+fn test_universal_compatibility_commands() {
+    let mut engine = ServerEngine::bind("127.0.0.1:0").expect("Failed to bind ephemeral port");
+    let addr = engine.local_addr();
+
+    let running = Arc::new(AtomicBool::new(true));
+    let running_clone = running.clone();
+
+    let server_handle = thread::spawn(move || {
+        while running_clone.load(Ordering::Relaxed) {
+            let events = engine.tick();
+            if events == 0 {
+                thread::sleep(Duration::from_micros(100));
+            }
+        }
+    });
+
+    let mut stream = TcpStream::connect(addr).unwrap();
+    stream.set_nodelay(true).unwrap();
+    stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+
+    let mut buf = [0u8; 1024];
+
+    // 1. SELECT 0 -> +OK\r\n
+    stream.write_all(b"*2\r\n$6\r\nSELECT\r\n$1\r\n0\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b"+OK\r\n");
+
+    // 2. CLIENT SETNAME my_client -> +OK\r\n
+    stream.write_all(b"*3\r\n$6\r\nCLIENT\r\n$7\r\nSETNAME\r\n$9\r\nmy_client\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b"+OK\r\n");
+
+    // 3. CLIENT LIST -> bulk string
+    stream.write_all(b"*2\r\n$6\r\nCLIENT\r\n$4\r\nLIST\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert!(buf[..n].starts_with(b"$"));
+
+    // 4. INCR visits -> :1\r\n
+    stream.write_all(b"*2\r\n$4\r\nINCR\r\n$6\r\nvisits\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b":1\r\n");
+
+    // 5. INCR visits -> :2\r\n
+    stream.write_all(b"*2\r\n$4\r\nINCR\r\n$6\r\nvisits\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b":2\r\n");
+
+    // 6. INCRBY visits 10 -> :12\r\n
+    stream.write_all(b"*3\r\n$6\r\nINCRBY\r\n$6\r\nvisits\r\n$2\r\n10\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b":12\r\n");
+
+    // 7. DECR visits -> :11\r\n
+    stream.write_all(b"*2\r\n$4\r\nDECR\r\n$6\r\nvisits\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b":11\r\n");
+
+    // 8. DECRBY visits 5 -> :6\r\n
+    stream.write_all(b"*3\r\n$6\r\nDECRBY\r\n$6\r\nvisits\r\n$1\r\n5\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b":6\r\n");
+
+    // 9. KEYS * -> array containing "visits"
+    stream.write_all(b"*2\r\n$4\r\nKEYS\r\n$1\r\n*\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b"*1\r\n$6\r\nvisits\r\n");
+
+    // 10. FLUSHDB -> +OK\r\n
+    stream.write_all(b"*1\r\n$7\r\nFLUSHDB\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b"+OK\r\n");
+
+    // 11. DBSIZE -> :0\r\n
+    stream.write_all(b"*1\r\n$6\r\nDBSIZE\r\n").unwrap();
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(&buf[..n], b":0\r\n");
+
+    running.store(false, Ordering::Relaxed);
+    let _ = server_handle.join();
+}
+

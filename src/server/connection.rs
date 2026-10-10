@@ -8,7 +8,7 @@ use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::protocol::resp::{Command, ParseError, RespEncoder, RespParser};
+use crate::protocol::resp::{match_pattern, Command, ParseError, RespEncoder, RespParser};
 use crate::storage::RobinHoodMap;
 use crate::timer::TimingWheel;
 
@@ -346,10 +346,112 @@ impl ClientConnection {
                 );
                 tx_buf.extend_from_slice(&RespEncoder::bulk_string(info_str.as_bytes()));
             }
+            Command::Incr { key } => {
+                Self::execute_incrby(tx_buf, key, 1, map, ttl_map, stats);
+            }
+            Command::Decr { key } => {
+                Self::execute_incrby(tx_buf, key, -1, map, ttl_map, stats);
+            }
+            Command::IncrBy { key, delta } => {
+                Self::execute_incrby(tx_buf, key, delta, map, ttl_map, stats);
+            }
+            Command::DecrBy { key, delta } => {
+                Self::execute_incrby(tx_buf, key, -delta, map, ttl_map, stats);
+            }
+            Command::Select { .. } => {
+                tx_buf.extend_from_slice(&RespEncoder::ok());
+            }
+            Command::Client { subcommand, .. } => {
+                if subcommand.eq_ignore_ascii_case(b"LIST") {
+                    let client_list = b"id=1 addr=127.0.0.1:0 fd=5 name= age=1 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=0 obl=0 oll=0 omem=0 events=r cmd=client\r\n";
+                    tx_buf.extend_from_slice(&RespEncoder::bulk_string(client_list));
+                } else if subcommand.eq_ignore_ascii_case(b"GETNAME") {
+                    tx_buf.extend_from_slice(&RespEncoder::null());
+                } else {
+                    tx_buf.extend_from_slice(&RespEncoder::ok());
+                }
+            }
+            Command::FlushDb => {
+                stats.total_writes += 1;
+                map.clear();
+                ttl_map.clear();
+                tx_buf.extend_from_slice(&RespEncoder::ok());
+            }
+            Command::Keys { pattern } => {
+                stats.total_reads += 1;
+                let mut matched_keys = Vec::new();
+                for &k in &map.keys() {
+                    // Check TTL expiration
+                    if let Some(&expire_time) = ttl_map.get(k) {
+                        if now >= expire_time {
+                            continue;
+                        }
+                    }
+                    if match_pattern(pattern, k) {
+                        matched_keys.push(k);
+                    }
+                }
+                tx_buf.extend_from_slice(&RespEncoder::bulk_string_array(&matched_keys));
+            }
             Command::Unknown(cmd_name) => {
                 let name_str = String::from_utf8_lossy(cmd_name);
                 let err = format!("unknown command '{}', with args beginning with: ", name_str);
                 tx_buf.extend_from_slice(&RespEncoder::error(&err));
+            }
+        }
+    }
+
+    fn execute_incrby(
+        tx_buf: &mut Vec<u8>,
+        key: &[u8],
+        delta: i64,
+        map: &mut RobinHoodMap,
+        ttl_map: &mut HashMap<Vec<u8>, Instant>,
+        stats: &mut ServerStats,
+    ) {
+        stats.total_writes += 1;
+        let now = Instant::now();
+
+        // Check TTL expiration
+        if let Some(&expire_time) = ttl_map.get(key) {
+            if now >= expire_time {
+                ttl_map.remove(key);
+                map.delete(key);
+            }
+        }
+
+        let curr_val = if let Some(val_bytes) = map.get(key) {
+            match std::str::from_utf8(val_bytes) {
+                Ok(s) => match s.parse::<i64>() {
+                    Ok(v) => v,
+                    Err(_) => {
+                        tx_buf.extend_from_slice(&RespEncoder::error(
+                            "ERR value is not an integer or out of range",
+                        ));
+                        return;
+                    }
+                },
+                Err(_) => {
+                    tx_buf.extend_from_slice(&RespEncoder::error(
+                        "ERR value is not an integer or out of range",
+                    ));
+                    return;
+                }
+            }
+        } else {
+            0
+        };
+
+        match curr_val.checked_add(delta) {
+            Some(new_val) => {
+                let new_val_str = new_val.to_string();
+                map.insert(key, new_val_str.as_bytes());
+                tx_buf.extend_from_slice(&RespEncoder::integer(new_val));
+            }
+            None => {
+                tx_buf.extend_from_slice(&RespEncoder::error(
+                    "ERR increment or decrement would overflow",
+                ));
             }
         }
     }

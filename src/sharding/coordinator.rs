@@ -33,6 +33,9 @@ pub enum ShardOp {
     Exists { key: Vec<u8> },
     Expire { key: Vec<u8>, ttl_ms: u64 },
     Ttl { key: Vec<u8> },
+    IncrBy { key: Vec<u8>, delta: i64 },
+    FlushDb,
+    Keys { pattern: Vec<u8> },
     Len,
     SnapshotScan { target_epoch: u64 },
     Shutdown,
@@ -46,6 +49,9 @@ pub enum ShardResult {
     Bool(bool),
     Count(usize),
     Ttl(i64),
+    Int(i64),
+    Keys(Vec<Vec<u8>>),
+    Error(String),
     Snapshot(Vec<SnapshotItem>),
 }
 
@@ -68,6 +74,7 @@ pub enum ShardError {
     QueueFull,
     WorkerDisconnected,
     AffinityFailed(String),
+    CommandError(String),
 }
 
 impl fmt::Display for ShardError {
@@ -77,6 +84,7 @@ impl fmt::Display for ShardError {
             Self::QueueFull => write!(f, "Shard SPSC queue is full"),
             Self::WorkerDisconnected => write!(f, "Shard worker thread disconnected"),
             Self::AffinityFailed(msg) => write!(f, "CPU affinity error: {}", msg),
+            Self::CommandError(msg) => write!(f, "{}", msg),
         }
     }
 }
@@ -276,6 +284,51 @@ impl ShardCoordinator {
             ShardResult::Ttl(ttl) => Ok(ttl),
             _ => Err(ShardError::WorkerDisconnected),
         }
+    }
+
+    /// Executes an atomic INCRBY operation on the target shard.
+    pub fn execute_incrby(&self, key: &[u8], delta: i64) -> Result<i64, ShardError> {
+        let shard_idx = self.route_key(key);
+        let result = self.dispatch_to_shard(
+            shard_idx,
+            ShardOp::IncrBy {
+                key: key.to_vec(),
+                delta,
+            },
+        )?;
+        match result {
+            ShardResult::Int(val) => Ok(val),
+            ShardResult::Error(err) => Err(ShardError::CommandError(err)),
+            _ => Err(ShardError::WorkerDisconnected),
+        }
+    }
+
+    /// Flushes all keys across all worker shards.
+    pub fn execute_flushdb(&self) -> Result<(), ShardError> {
+        for shard_idx in 0..self.num_shards() {
+            let result = self.dispatch_to_shard(shard_idx, ShardOp::FlushDb)?;
+            if result != ShardResult::Ok {
+                return Err(ShardError::WorkerDisconnected);
+            }
+        }
+        Ok(())
+    }
+
+    /// Aggregates all matching keys across all worker shards.
+    pub fn execute_keys(&self, pattern: &[u8]) -> Result<Vec<Vec<u8>>, ShardError> {
+        let mut all_keys = Vec::new();
+        for shard_idx in 0..self.num_shards() {
+            let result = self.dispatch_to_shard(
+                shard_idx,
+                ShardOp::Keys {
+                    pattern: pattern.to_vec(),
+                },
+            )?;
+            if let ShardResult::Keys(keys) = result {
+                all_keys.extend(keys);
+            }
+        }
+        Ok(all_keys)
     }
 
     /// Executes a multi-key MGET operation with deterministic ascending shard ID ordering.
@@ -504,6 +557,65 @@ fn run_shard_worker(rx: Consumer<ShardRequest>, tx: Producer<ShardResponse>) {
                     }
                 }
                 ShardOp::Len => ShardResult::Count(map.len()),
+                ShardOp::IncrBy { key, delta } => {
+                    let now = Instant::now();
+                    if let Some(expire_at) = ttl_map.get(&key) {
+                        if now >= *expire_at {
+                            map.delete(&key);
+                            ttl_map.remove(&key);
+                        }
+                    }
+
+                    let curr_val = if let Some(val_bytes) = map.get(&key) {
+                        match std::str::from_utf8(val_bytes) {
+                            Ok(s) => match s.parse::<i64>() {
+                                Ok(v) => Ok(v),
+                                Err(_) => {
+                                    Err("ERR value is not an integer or out of range".to_string())
+                                }
+                            },
+                            Err(_) => {
+                                Err("ERR value is not an integer or out of range".to_string())
+                            }
+                        }
+                    } else {
+                        Ok(0)
+                    };
+
+                    match curr_val {
+                        Err(err) => ShardResult::Error(err),
+                        Ok(curr) => match curr.checked_add(delta) {
+                            Some(new_val) => {
+                                let new_val_str = new_val.to_string();
+                                map.insert(&key, new_val_str.as_bytes());
+                                ShardResult::Int(new_val)
+                            }
+                            None => {
+                                ShardResult::Error("ERR increment or decrement would overflow".to_string())
+                            }
+                        },
+                    }
+                }
+                ShardOp::FlushDb => {
+                    map.clear();
+                    ttl_map.clear();
+                    ShardResult::Ok
+                }
+                ShardOp::Keys { pattern } => {
+                    let now = Instant::now();
+                    let mut matched = Vec::new();
+                    for &k in &map.keys() {
+                        if let Some(expire_at) = ttl_map.get(k) {
+                            if now >= *expire_at {
+                                continue;
+                            }
+                        }
+                        if crate::protocol::resp::match_pattern(&pattern, k) {
+                            matched.push(k.to_vec());
+                        }
+                    }
+                    ShardResult::Keys(matched)
+                }
                 ShardOp::SnapshotScan { target_epoch } => {
                     let scan_now_ms = SystemTime::now()
                         .duration_since(UNIX_EPOCH)

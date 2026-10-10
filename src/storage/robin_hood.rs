@@ -359,6 +359,15 @@ impl RobinHoodMap {
         self.count = 0;
     }
 
+    /// Returns all occupied key slices in the map.
+    pub fn keys(&self) -> Vec<&[u8]> {
+        self.slots
+            .iter()
+            .filter(|s| s.is_occupied())
+            .map(|s| s.key())
+            .collect()
+    }
+
     /// Calculates the maximum Distance from Ideal Bucket across all active slots.
     pub fn max_probe_length(&self) -> usize {
         self.slots

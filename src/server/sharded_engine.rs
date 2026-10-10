@@ -581,10 +581,96 @@ impl ShardedServerEngine {
                 let last = last_save_time.load(Ordering::Acquire);
                 tx_buf.extend_from_slice(&RespEncoder::integer(last as i64));
             }
+            Command::Incr { key } => {
+                Self::execute_sharded_incrby(
+                    tx_buf, key, 1, coordinator, epoch_tracker, wal_writer, stats,
+                );
+            }
+            Command::Decr { key } => {
+                Self::execute_sharded_incrby(
+                    tx_buf, key, -1, coordinator, epoch_tracker, wal_writer, stats,
+                );
+            }
+            Command::IncrBy { key, delta } => {
+                Self::execute_sharded_incrby(
+                    tx_buf, key, delta, coordinator, epoch_tracker, wal_writer, stats,
+                );
+            }
+            Command::DecrBy { key, delta } => {
+                Self::execute_sharded_incrby(
+                    tx_buf, key, -delta, coordinator, epoch_tracker, wal_writer, stats,
+                );
+            }
+            Command::Select { .. } => {
+                tx_buf.extend_from_slice(&RespEncoder::ok());
+            }
+            Command::Client { subcommand, .. } => {
+                if subcommand.eq_ignore_ascii_case(b"LIST") {
+                    let client_list = b"id=1 addr=127.0.0.1:0 fd=5 name= age=1 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=0 obl=0 oll=0 omem=0 events=r cmd=client\r\n";
+                    tx_buf.extend_from_slice(&RespEncoder::bulk_string(client_list));
+                } else if subcommand.eq_ignore_ascii_case(b"GETNAME") {
+                    tx_buf.extend_from_slice(&RespEncoder::null());
+                } else {
+                    tx_buf.extend_from_slice(&RespEncoder::ok());
+                }
+            }
+            Command::FlushDb => {
+                stats.total_writes += 1;
+                let _epoch = epoch_tracker.advance();
+                match coordinator.execute_flushdb() {
+                    Ok(()) => tx_buf.extend_from_slice(&RespEncoder::ok()),
+                    Err(e) => tx_buf.extend_from_slice(&RespEncoder::error(&format!("ERR Shard error: {}", e))),
+                }
+            }
+            Command::Keys { pattern } => {
+                stats.total_reads += 1;
+                match coordinator.execute_keys(pattern) {
+                    Ok(keys) => {
+                        let key_refs: Vec<&[u8]> = keys.iter().map(|k| k.as_slice()).collect();
+                        tx_buf.extend_from_slice(&RespEncoder::bulk_string_array(&key_refs));
+                    }
+                    Err(e) => tx_buf.extend_from_slice(&RespEncoder::error(&format!("ERR Shard error: {}", e))),
+                }
+            }
             Command::Unknown(cmd_name) => {
                 let name_str = String::from_utf8_lossy(cmd_name);
                 let err = format!("unknown command '{}', with args beginning with: ", name_str);
                 tx_buf.extend_from_slice(&RespEncoder::error(&err));
+            }
+        }
+    }
+
+    fn execute_sharded_incrby(
+        tx_buf: &mut Vec<u8>,
+        key: &[u8],
+        delta: i64,
+        coordinator: &Arc<ShardCoordinator>,
+        epoch_tracker: &Arc<EpochTracker>,
+        wal_writer: &Option<Arc<WalWriter>>,
+        stats: &mut ShardedServerStats,
+    ) {
+        stats.total_writes += 1;
+        match coordinator.execute_incrby(key, delta) {
+            Ok(new_val) => {
+                let epoch = epoch_tracker.advance();
+                if let Some(ref wal) = wal_writer {
+                    let _ = wal.append(
+                        epoch,
+                        WalOp::Set {
+                            key: key.to_vec(),
+                            value: new_val.to_string().into_bytes(),
+                            ttl_ms: None,
+                        },
+                    );
+                }
+                tx_buf.extend_from_slice(&RespEncoder::integer(new_val));
+            }
+            Err(crate::sharding::coordinator::ShardError::CommandError(ref msg)) => {
+                let clean_msg = msg.trim_start_matches("ERR ");
+                tx_buf.extend_from_slice(&RespEncoder::error(clean_msg));
+            }
+            Err(e) => {
+                tx_buf.extend_from_slice(&RespEncoder::error(&format!("ERR Shard error: {}", e)));
             }
         }
     }
