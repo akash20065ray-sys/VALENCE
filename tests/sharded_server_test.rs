@@ -12,7 +12,11 @@ use valence::{ShardedServerEngine, SnapshotReader};
 
 #[test]
 fn test_sharded_server_tcp_e2e_commands() {
-    let mut engine = ShardedServerEngine::bind_with_shards("127.0.0.1:0", 4)
+    let test_dir = std::env::temp_dir().join(format!("val_sharded_tcp_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&test_dir);
+    fs::create_dir_all(&test_dir).unwrap();
+
+    let mut engine = ShardedServerEngine::bind_with_data_dir("127.0.0.1:0", 4, &test_dir)
         .expect("Failed to bind 4-shard server");
     let addr = engine.local_addr();
 
@@ -95,11 +99,16 @@ fn test_sharded_server_tcp_e2e_commands() {
 
     running.store(false, Ordering::Relaxed);
     let _ = server_handle.join();
+    let _ = fs::remove_dir_all(&test_dir);
 }
 
 #[test]
 fn test_sharded_server_ttl_expiration() {
-    let mut engine = ShardedServerEngine::bind_with_shards("127.0.0.1:0", 2)
+    let test_dir = std::env::temp_dir().join(format!("val_sharded_ttl_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&test_dir);
+    fs::create_dir_all(&test_dir).unwrap();
+
+    let mut engine = ShardedServerEngine::bind_with_data_dir("127.0.0.1:0", 2, &test_dir)
         .expect("Failed to bind 2-shard server");
     let addr = engine.local_addr();
 
@@ -151,6 +160,7 @@ fn test_sharded_server_ttl_expiration() {
 
     running.store(false, Ordering::Relaxed);
     let _ = server_handle.join();
+    let _ = fs::remove_dir_all(&test_dir);
 }
 
 #[test]
@@ -159,9 +169,8 @@ fn test_sharded_server_forkless_save_and_lastsave() {
     let _ = fs::remove_dir_all(&test_dir);
     fs::create_dir_all(&test_dir).unwrap();
 
-    let mut engine = ShardedServerEngine::bind_with_shards("127.0.0.1:0", 4)
-        .expect("Failed to bind 4-shard server")
-        .with_data_dir(&test_dir);
+    let mut engine = ShardedServerEngine::bind_with_data_dir("127.0.0.1:0", 4, &test_dir)
+        .expect("Failed to bind 4-shard server");
     let addr = engine.local_addr();
 
     let running = Arc::new(AtomicBool::new(true));
@@ -232,7 +241,11 @@ fn test_sharded_server_forkless_save_and_lastsave() {
 
 #[test]
 fn test_sharded_server_pipelined_and_multi_client() {
-    let mut engine = ShardedServerEngine::bind_with_shards("127.0.0.1:0", 4)
+    let test_dir = std::env::temp_dir().join(format!("val_sharded_pipeline_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&test_dir);
+    fs::create_dir_all(&test_dir).unwrap();
+
+    let mut engine = ShardedServerEngine::bind_with_data_dir("127.0.0.1:0", 4, &test_dir)
         .expect("Failed to bind 4-shard server");
     let addr = engine.local_addr();
 
@@ -301,4 +314,5 @@ fn test_sharded_server_pipelined_and_multi_client() {
 
     running.store(false, Ordering::Relaxed);
     let _ = server_handle.join();
+    let _ = fs::remove_dir_all(&test_dir);
 }

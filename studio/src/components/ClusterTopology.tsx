@@ -9,14 +9,16 @@ import {
   CheckCircle2,
   Save,
   Check,
+  FileText,
 } from 'lucide-react';
-import type { ShardData, KeyspaceItem, SnapshotRecord } from '../types';
+import type { ShardData, KeyspaceItem, SnapshotRecord, WalState } from '../types';
 
 interface ClusterTopologyProps {
   shards: ShardData[];
   keyspace: KeyspaceItem[];
   epoch: number;
   lastSnapshot: SnapshotRecord | null;
+  walState?: WalState;
 }
 
 export const ClusterTopology: React.FC<ClusterTopologyProps> = ({
@@ -24,6 +26,7 @@ export const ClusterTopology: React.FC<ClusterTopologyProps> = ({
   keyspace,
   epoch,
   lastSnapshot,
+  walState,
 }) => {
   const totalKeys = keyspace.length;
   const ssoKeys = keyspace.filter((k) => k.isSso).length;
@@ -154,6 +157,68 @@ export const ClusterTopology: React.FC<ClusterTopologyProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Segmented Binary WAL & Group Commit Pipeline Card */}
+      <div className="card" style={{ background: 'var(--bg-surface)' }}>
+        <div className="card-header">
+          <div className="card-title">
+            <FileText size={15} color="var(--accent-cyan)" />
+            <span>Segmented Binary Write-Ahead Log (WAL) & Group Commit</span>
+          </div>
+          <span style={{ fontSize: '11.5px', color: 'var(--accent-cyan)', fontFamily: 'JetBrains Mono, monospace', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <CheckCircle2 size={13} /> {walState?.syncPolicy ?? 'GroupCommit'} Durability
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '12px',
+          }}
+        >
+          <div style={{ background: 'var(--bg-elevated)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>LOG SEQUENCE NUMBER (LSN)</div>
+            <div style={{ fontSize: '15px', fontWeight: 700, marginTop: '2px', color: 'var(--accent-cyan)', fontFamily: 'JetBrains Mono, monospace' }}>
+              LSN #{walState?.currentLsn ?? 13}
+            </div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+              Strict monotonic ordering across all shards
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-elevated)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>ACTIVE ROTATION SEGMENT</div>
+            <div style={{ fontSize: '13px', fontWeight: 600, marginTop: '2px', color: 'var(--text-primary)', fontFamily: 'JetBrains Mono, monospace' }}>
+              {walState?.activeSegment ?? 'wal_0000000000000001.valwal'}
+            </div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+              64MB boundary rotation & deterministic headers
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-elevated)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>CRASH RECOVERY REPLAY</div>
+            <div style={{ fontSize: '15px', fontWeight: 700, marginTop: '2px', color: 'var(--accent-green)', fontFamily: 'JetBrains Mono, monospace' }}>
+              Zero-Loss Tail Scan
+            </div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+              Torn-write truncation & CRC64 verification
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-elevated)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>FSYNC GROUP PIPELINE</div>
+            <div style={{ fontSize: '15px', fontWeight: 700, marginTop: '2px', color: 'var(--accent-amber)', fontFamily: 'JetBrains Mono, monospace' }}>
+              High-Throughput Batching
+            </div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+              Sub-millisecond batched disk flush
+            </div>
+          </div>
+        </div>
+      </div>
+
 
       {/* Shard Cores Grid */}
       <div>

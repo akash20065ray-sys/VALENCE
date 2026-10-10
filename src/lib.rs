@@ -15,6 +15,7 @@ pub mod sharding;
 pub mod snapshot;
 pub mod storage;
 pub mod timer;
+pub mod wal;
 
 pub use protocol::{Command, ParseError, RespEncoder, RespParser};
 pub use server::{ClientConnection, ServerEngine, ServerStats, ShardedServerEngine, ShardedServerStats};
@@ -33,3 +34,8 @@ pub use snapshot::{
 pub use storage::entry::{CompactKey, CompactValue, Slot, SlotState};
 pub use storage::robin_hood::RobinHoodMap;
 pub use timer::{AtomicTimerBucket, TimerNode, TimingWheel};
+pub use wal::{
+    format_segment_filename, parse_segment_id, SyncPolicy, WalError, WalOp, WalRecord,
+    WalRecovery, WalRecoveryReport, WalSegmentHeader, WalSegmentManager, WalWriter,
+    DEFAULT_MAX_SEGMENT_SIZE, WAL_RECORD_MAGIC, WAL_SEGMENT_MAGIC, WAL_SEGMENT_VERSION,
+};

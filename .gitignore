@@ -27,3 +27,7 @@ Thumbs.db
 # Frontend studio build artifacts
 studio/node_modules/
 studio/dist/
+
+# Local database runtime data
+data/
+

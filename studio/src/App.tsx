@@ -10,12 +10,13 @@ import {
   Layers,
   Save,
   CheckCircle2,
+  FileText,
 } from 'lucide-react';
 import { KeyspaceBrowser } from './components/KeyspaceBrowser';
 import { ClusterTopology } from './components/ClusterTopology';
 import { ActivityProfiler } from './components/ActivityProfiler';
 import { RespWorkbench } from './components/RespWorkbench';
-import type { ShardData, KeyspaceItem, CommandLog, ThemeMode, SnapshotRecord } from './types';
+import type { ShardData, KeyspaceItem, CommandLog, ThemeMode, SnapshotRecord, WalState } from './types';
 import { routeKey } from './utils/router';
 
 export function App() {
@@ -43,6 +44,16 @@ export function App() {
     crc64Hex: '0x9E4B8F21A7C3D015',
     sizeBytes: 254,
     status: 'saved',
+  });
+
+  // Binary Write-Ahead Log (WAL) State
+  const [walState, setWalState] = useState<WalState>({
+    currentLsn: 13,
+    syncPolicy: 'GroupCommit',
+    activeSegment: 'wal_0000000000000001.valwal',
+    totalSegments: 1,
+    segmentSizeBytes: 67108864,
+    status: 'active',
   });
 
   // General-Purpose In-Memory State across diverse application domains
@@ -167,12 +178,13 @@ export function App() {
     };
   });
 
-  // Key Mutation Handlers (Advances Monotonic Epoch)
+  // Key Mutation Handlers (Advances Monotonic Epoch & WAL LSN)
   const handleSetKey = (key: string, value: string, ttlMs: number | null) => {
     const isSso = key.length <= 15 && value.length <= 23;
     const targetShard = routeKey(key, shards.length);
     const nextEpoch = epoch + 1;
     setEpoch(nextEpoch);
+    setWalState((prev) => ({ ...prev, currentLsn: prev.currentLsn + 1 }));
 
     const newItem: KeyspaceItem = {
       key,
@@ -206,6 +218,7 @@ export function App() {
   const handleDeleteKey = (key: string) => {
     const nextEpoch = epoch + 1;
     setEpoch(nextEpoch);
+    setWalState((prev) => ({ ...prev, currentLsn: prev.currentLsn + 1 }));
     setKeyspace((prev) => prev.filter((k) => k.key !== key));
 
     setCommandLogs((prev) => [
@@ -369,7 +382,7 @@ export function App() {
         break;
 
       case 'INFO':
-        response = `# Server\nvalence_version:0.1.0\narch:thread_per_core_shared_nothing\nshards:${shards.length}\nstate:standby_ready\n\n# Persistence\nepoch:${epoch}\nforkless_snapshots:active\nformat:valence_snap_v1\nchecksum:ecma182_crc64\n\n# Memory\nkeys_total:${keyspace.length}\nsso_inlined_ratio:${Math.round((keyspace.filter((k) => k.isSso).length / Math.max(1, keyspace.length)) * 100)}%\nslot_size_bytes:64\n\n# Expiration\ntiming_wheel_tiers:4\nresolution:1ms`;
+        response = `# Server\nvalence_version:0.1.0\narch:thread_per_core_shared_nothing\nshards:${shards.length}\nstate:standby_ready\n\n# Persistence\nepoch:${epoch}\nforkless_snapshots:active\nformat:valence_snap_v1\nwal_enabled:1\nwal_current_lsn:${walState.currentLsn}\nwal_sync_policy:${walState.syncPolicy}\nwal_active_segment:${walState.activeSegment}\nchecksum:ecma182_crc64\n\n# Memory\nkeys_total:${keyspace.length}\nsso_inlined_ratio:${Math.round((keyspace.filter((k) => k.isSso).length / Math.max(1, keyspace.length)) * 100)}%\nslot_size_bytes:64\n\n# Expiration\ntiming_wheel_tiers:4\nresolution:1ms`;
         break;
 
       default:
@@ -437,6 +450,12 @@ export function App() {
               <CheckCircle2 size={12} color="var(--accent-green)" />
               <span>SNAPSHOTS:</span>
               <span className="val" style={{ color: 'var(--accent-green)' }}>FORKLESS</span>
+            </div>
+
+            <div className="stat-pill">
+              <FileText size={12} color="var(--accent-cyan)" />
+              <span>WAL LSN:</span>
+              <span className="val" style={{ color: 'var(--accent-cyan)' }}>#{walState.currentLsn}</span>
             </div>
           </div>
 
@@ -514,6 +533,7 @@ export function App() {
             keyspace={keyspace}
             epoch={epoch}
             lastSnapshot={lastSnapshot}
+            walState={walState}
           />
         )}
 

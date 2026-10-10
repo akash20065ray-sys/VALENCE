@@ -21,6 +21,7 @@ use crate::sharding::affinity::CpuTopology;
 use crate::sharding::coordinator::ShardCoordinator;
 use crate::snapshot::epoch::{EpochTracker, SnapshotRegistry};
 use crate::snapshot::persistence::SnapshotWriter;
+use crate::wal::{SyncPolicy, WalOp, WalRecovery, WalWriter, DEFAULT_MAX_SEGMENT_SIZE};
 
 /// Operational metrics for the sharded server engine.
 #[derive(Debug, Clone)]
@@ -58,6 +59,8 @@ pub struct ShardedServerEngine {
     num_shards: usize,
     last_save_time: Arc<AtomicU64>,
     data_dir: PathBuf,
+    wal_writer: Option<Arc<WalWriter>>,
+    sync_policy: SyncPolicy,
 }
 
 impl ShardedServerEngine {
@@ -68,8 +71,12 @@ impl ShardedServerEngine {
         Self::bind_with_shards(addr, num_shards)
     }
 
-    /// Binds the engine to the specified address with an explicit shard count.
-    pub fn bind_with_shards(addr: &str, num_shards: usize) -> io::Result<Self> {
+    /// Binds the engine to the specified address with an explicit shard count and custom data directory.
+    pub fn bind_with_data_dir(
+        addr: &str,
+        num_shards: usize,
+        data_dir: impl Into<PathBuf>,
+    ) -> io::Result<Self> {
         let listener = TcpListener::bind(addr)?;
         listener.set_nonblocking(true)?;
         let bind_addr = listener.local_addr()?;
@@ -82,7 +89,10 @@ impl ShardedServerEngine {
             .unwrap_or_default()
             .as_secs();
 
-        Ok(Self {
+        let data_dir = data_dir.into();
+        let wal_dir = data_dir.join("wal");
+
+        let mut engine = Self {
             listener,
             coordinator: Arc::new(coordinator),
             epoch_tracker: Arc::new(EpochTracker::new()),
@@ -92,14 +102,57 @@ impl ShardedServerEngine {
             bind_addr,
             num_shards,
             last_save_time: Arc::new(AtomicU64::new(now_sec)),
-            data_dir: PathBuf::from("./data"),
-        })
+            data_dir,
+            wal_writer: None,
+            sync_policy: SyncPolicy::default(),
+        };
+
+        let _ = engine.init_wal(&wal_dir);
+        Ok(engine)
     }
 
-    /// Overrides the directory where point-in-time snapshots (.val) are persisted.
+    /// Binds the engine to the specified address with an explicit shard count.
+    pub fn bind_with_shards(addr: &str, num_shards: usize) -> io::Result<Self> {
+        Self::bind_with_data_dir(addr, num_shards, PathBuf::from("./data"))
+    }
+
+    /// Overrides the directory where point-in-time snapshots (.val) and WAL files are persisted.
     pub fn with_data_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.data_dir = path.into();
+        let wal_dir = self.data_dir.join("wal");
+        let _ = self.init_wal(&wal_dir);
         self
+    }
+
+    /// Overrides durability sync policy for the WAL engine.
+    pub fn with_sync_policy(mut self, policy: SyncPolicy) -> Self {
+        self.sync_policy = policy;
+        let wal_dir = self.data_dir.join("wal");
+        let _ = self.init_wal(&wal_dir);
+        self
+    }
+
+    /// Initializes and recovers WAL state from `wal_dir`.
+    pub fn init_wal(&mut self, wal_dir: &Path) -> io::Result<()> {
+        let report = WalRecovery::replay_into_coordinator(wal_dir, &self.coordinator, &self.epoch_tracker)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+        let next_lsn = report.max_lsn + 1;
+        let writer = WalWriter::with_starting_lsn(
+            wal_dir,
+            DEFAULT_MAX_SEGMENT_SIZE,
+            next_lsn,
+            self.sync_policy,
+        ).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+        self.wal_writer = Some(Arc::new(writer));
+        Ok(())
+    }
+
+    /// Returns a reference to the active WAL writer, if initialized.
+    #[inline(always)]
+    pub fn wal_writer(&self) -> Option<&Arc<WalWriter>> {
+        self.wal_writer.as_ref()
     }
 
     /// Bound local socket address.
@@ -186,6 +239,7 @@ impl ShardedServerEngine {
                     &self.epoch_tracker,
                     &self.snapshot_registry,
                     &self.last_save_time,
+                    &self.wal_writer,
                     &self.data_dir,
                     self.num_shards,
                     &mut self.stats,
@@ -220,6 +274,7 @@ impl ShardedServerEngine {
         epoch_tracker: &Arc<EpochTracker>,
         snapshot_registry: &Arc<SnapshotRegistry>,
         last_save_time: &Arc<AtomicU64>,
+        wal_writer: &Option<Arc<WalWriter>>,
         data_dir: &Path,
         num_shards: usize,
         stats: &mut ShardedServerStats,
@@ -238,6 +293,7 @@ impl ShardedServerEngine {
                         epoch_tracker,
                         snapshot_registry,
                         last_save_time,
+                        wal_writer,
                         data_dir,
                         num_shards,
                         stats,
@@ -272,6 +328,7 @@ impl ShardedServerEngine {
         epoch_tracker: &Arc<EpochTracker>,
         snapshot_registry: &Arc<SnapshotRegistry>,
         last_save_time: &Arc<AtomicU64>,
+        wal_writer: &Option<Arc<WalWriter>>,
         data_dir: &Path,
         num_shards: usize,
         stats: &mut ShardedServerStats,
@@ -296,7 +353,14 @@ impl ShardedServerEngine {
             }
             Command::Set { key, value, expire_ms } => {
                 stats.total_writes += 1;
-                epoch_tracker.advance();
+                let epoch = epoch_tracker.advance();
+                if let Some(ref wal) = wal_writer {
+                    let _ = wal.append(epoch, WalOp::Set {
+                        key: key.to_vec(),
+                        value: value.to_vec(),
+                        ttl_ms: expire_ms,
+                    });
+                }
                 match coordinator.execute_set(key, value, expire_ms) {
                     Ok(()) => tx_buf.extend_from_slice(&RespEncoder::ok()),
                     Err(e) => tx_buf.extend_from_slice(&RespEncoder::error(&format!("ERR Shard error: {}", e))),
@@ -304,7 +368,12 @@ impl ShardedServerEngine {
             }
             Command::Del { key } => {
                 stats.total_deletes += 1;
-                epoch_tracker.advance();
+                let epoch = epoch_tracker.advance();
+                if let Some(ref wal) = wal_writer {
+                    let _ = wal.append(epoch, WalOp::Del {
+                        key: key.to_vec(),
+                    });
+                }
                 match coordinator.execute_del(key) {
                     Ok(deleted) => tx_buf.extend_from_slice(&RespEncoder::integer(if deleted { 1 } else { 0 })),
                     Err(e) => tx_buf.extend_from_slice(&RespEncoder::error(&format!("ERR Shard error: {}", e))),
@@ -319,7 +388,13 @@ impl ShardedServerEngine {
             }
             Command::Expire { key, seconds } => {
                 stats.total_writes += 1;
-                epoch_tracker.advance();
+                let epoch = epoch_tracker.advance();
+                if let Some(ref wal) = wal_writer {
+                    let _ = wal.append(epoch, WalOp::Expire {
+                        key: key.to_vec(),
+                        ttl_ms: seconds * 1000,
+                    });
+                }
                 match coordinator.execute_expire(key, seconds * 1000) {
                     Ok(ok) => tx_buf.extend_from_slice(&RespEncoder::integer(if ok { 1 } else { 0 })),
                     Err(e) => tx_buf.extend_from_slice(&RespEncoder::error(&format!("ERR Shard error: {}", e))),
@@ -344,7 +419,16 @@ impl ShardedServerEngine {
             }
             Command::MSet { pairs } => {
                 stats.total_writes += pairs.len() as u64;
-                epoch_tracker.advance();
+                let epoch = epoch_tracker.advance();
+                if let Some(ref wal) = wal_writer {
+                    for &(k, v) in &pairs {
+                        let _ = wal.append(epoch, WalOp::Set {
+                            key: k.to_vec(),
+                            value: v.to_vec(),
+                            ttl_ms: None,
+                        });
+                    }
+                }
                 match coordinator.execute_mset(&pairs) {
                     Ok(()) => tx_buf.extend_from_slice(&RespEncoder::ok()),
                     Err(e) => tx_buf.extend_from_slice(&RespEncoder::error(&format!("ERR Shard error: {}", e))),
@@ -364,6 +448,11 @@ impl ShardedServerEngine {
                 let uptime_sec = stats.start_time.elapsed().as_secs();
                 let total_keys = coordinator.total_keys().unwrap_or(0);
                 let curr_epoch = epoch_tracker.current();
+                let (wal_enabled, current_lsn, current_seg) = if let Some(ref wal) = wal_writer {
+                    (1, wal.next_lsn().saturating_sub(1), wal.current_segment_id())
+                } else {
+                    (0, 0, 0)
+                };
                 let info_str = format!(
                     "# Server\r\n\
                     valence_version:0.1.0\r\n\
@@ -373,6 +462,12 @@ impl ShardedServerEngine {
                     uptime_in_seconds:{}\r\n\
                     num_shards:{}\r\n\
                     active_epoch:{}\r\n\
+                    \r\n\
+                    # Persistence\r\n\
+                    rdb_last_save_time:{}\r\n\
+                    wal_enabled:{}\r\n\
+                    wal_current_lsn:{}\r\n\
+                    wal_current_segment:{}\r\n\
                     \r\n\
                     # Clients\r\n\
                     connected_clients:{}\r\n\
@@ -388,6 +483,10 @@ impl ShardedServerEngine {
                     uptime_sec,
                     num_shards,
                     curr_epoch,
+                    last_save_time.load(Ordering::Acquire),
+                    wal_enabled,
+                    current_lsn,
+                    current_seg,
                     stats.clients_connected,
                     stats.total_ops,
                     stats.total_reads,
@@ -399,6 +498,9 @@ impl ShardedServerEngine {
             }
             Command::Save => {
                 let target_epoch = epoch_tracker.current();
+                if let Some(ref wal) = wal_writer {
+                    let _ = wal.checkpoint(target_epoch);
+                }
                 let meta = snapshot_registry.register(target_epoch);
 
                 match coordinator.collect_snapshot(target_epoch) {
@@ -434,6 +536,9 @@ impl ShardedServerEngine {
             }
             Command::Bgsave => {
                 let target_epoch = epoch_tracker.current();
+                if let Some(ref wal) = wal_writer {
+                    let _ = wal.checkpoint(target_epoch);
+                }
                 let meta = snapshot_registry.register(target_epoch);
                 let coord_clone = Arc::clone(coordinator);
                 let reg_clone = Arc::clone(snapshot_registry);

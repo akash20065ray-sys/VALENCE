@@ -45,3 +45,13 @@ export interface SnapshotRecord {
   sizeBytes: number;
   status: 'saved' | 'in_progress';
 }
+
+export interface WalState {
+  currentLsn: number;
+  syncPolicy: 'Always' | 'GroupCommit' | 'Periodic';
+  activeSegment: string;
+  totalSegments: number;
+  segmentSizeBytes: number;
+  status: 'active' | 'recovering';
+}
+
