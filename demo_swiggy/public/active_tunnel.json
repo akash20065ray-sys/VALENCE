@@ -1,0 +1,8 @@
+{
+  "url": "https://description-exp-showtimes-option.trycloudflare.com",
+  "provider": "Cloudflare Edge",
+  "port": 3000,
+  "valence_port": 6379,
+  "cinema_url": "https://description-exp-showtimes-option.trycloudflare.com/cinema.html",
+  "timestamp": 1792183500
+}

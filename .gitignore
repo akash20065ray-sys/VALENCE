@@ -33,3 +33,6 @@ data/
 
 # Hackathon temporary extracted slide images
 hackathon_slides/
+
+scratch/
+chrome_temp/

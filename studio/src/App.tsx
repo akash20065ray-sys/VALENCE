@@ -33,17 +33,17 @@ import type {
   WalRecoveryReportView,
   WorkloadMode,
 } from './types';
-import { routeKey } from './utils/router';
+import { routeKey, murmur3_32 } from './utils/router';
 
 export function App() {
   // Navigation: 7 Core Operational Pillars of Enterprise In-Memory Database Console
   const [activeTab, setActiveTab] = useState<
     'keyspace' | 'topology' | 'tiering' | 'explain' | 'durability' | 'profiler' | 'workbench'
-  >('keyspace');
+  >('tiering');
 
-  // Theme Mode: Default is 'slate' (balanced industrial mid-tone slate)
+  // Theme Mode: Default is 'charcoal' (Deep dark mode for ultra-high contrast)
   const [theme, setTheme] = useState<ThemeMode>(() => {
-    return (localStorage.getItem('valence_theme') as ThemeMode) || 'slate';
+    return (localStorage.getItem('valence_theme') as ThemeMode) || 'charcoal';
   });
 
   useEffect(() => {
@@ -314,6 +314,48 @@ export function App() {
       targetShard: routeKey('telemetry:node:mem_pct', 4),
     },
   ]);
+
+  // Live Synchronization with Valence Rust Engine (Port 6379 via /api/sync)
+  useEffect(() => {
+    const syncWithEngine = async () => {
+      try {
+        const res = await fetch('/api/sync');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.keys) && data.keys.length > 0) {
+          setKeyspace((prev) => {
+            const updated = [...prev];
+            for (const serverKey of data.keys) {
+              const existingIndex = updated.findIndex((k) => k.key === serverKey.key);
+              const mappedItem: KeyspaceItem = {
+                key: serverKey.key,
+                value: serverKey.value || '(nil)',
+                dataType: 'string',
+                sizeBytes: serverKey.sizeBytes || 16,
+                isSso: (serverKey.sizeBytes || 16) <= 24,
+                dib: (murmur3_32(serverKey.key) % 3),
+                epoch: epoch,
+                ttlMs: null,
+                expiresAt: null,
+                targetShard: routeKey(serverKey.key, 4),
+              };
+              if (existingIndex >= 0) {
+                updated[existingIndex] = { ...updated[existingIndex], value: mappedItem.value };
+              } else {
+                updated.unshift(mappedItem);
+              }
+            }
+            return updated;
+          });
+        }
+      } catch {
+        // standalone mode fallback
+      }
+    };
+
+    const interval = setInterval(syncWithEngine, 1500);
+    syncWithEngine();
+    return () => clearInterval(interval);
+  }, [epoch]);
 
   // Initial Command Audit Logs
   const [commandLogs, setCommandLogs] = useState<CommandLog[]>([
